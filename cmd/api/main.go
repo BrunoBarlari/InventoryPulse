@@ -4,7 +4,12 @@ import (
 	"log"
 
 	"github.com/brunobarlari/inventorypulse/internal/config"
+	"github.com/brunobarlari/inventorypulse/internal/handler"
+	"github.com/brunobarlari/inventorypulse/internal/middleware"
+	"github.com/brunobarlari/inventorypulse/internal/repository"
+	"github.com/brunobarlari/inventorypulse/internal/service"
 	"github.com/brunobarlari/inventorypulse/pkg/database"
+	"github.com/brunobarlari/inventorypulse/pkg/jwt"
 	"github.com/gin-gonic/gin"
 )
 
@@ -60,6 +65,21 @@ func main() {
 		log.Fatalf("Failed to run seeder: %v", err)
 	}
 
+	// Initialize JWT service
+	jwtService := jwt.NewJWTService(&cfg.JWT)
+
+	// Initialize repositories
+	userRepo := repository.NewUserRepository(db)
+
+	// Initialize services
+	authService := service.NewAuthService(userRepo, jwtService)
+
+	// Initialize handlers
+	authHandler := handler.NewAuthHandler(authService)
+
+	// Initialize middleware
+	authMiddleware := middleware.NewAuthMiddleware(authService)
+
 	// Initialize Gin router
 	router := gin.Default()
 
@@ -71,7 +91,7 @@ func main() {
 		})
 	})
 
-	// API routes will be added here
+	// API routes
 	api := router.Group("/api")
 	{
 		api.GET("/", func(c *gin.Context) {
@@ -79,6 +99,30 @@ func main() {
 				"message": "Welcome to InventoryPulse API v1.0",
 			})
 		})
+
+		// Auth routes
+		auth := api.Group("/auth")
+		{
+			auth.POST("/login", authHandler.Login)
+			auth.POST("/refresh", authHandler.Refresh)
+
+			// Protected routes (require authentication)
+			authProtected := auth.Group("")
+			authProtected.Use(authMiddleware.RequireAuth())
+			{
+				authProtected.GET("/me", authHandler.Me)
+
+				// Admin only routes
+				authAdmin := authProtected.Group("")
+				authAdmin.Use(authMiddleware.RequireAdmin())
+				{
+					authAdmin.POST("/register", authHandler.Register)
+				}
+			}
+		}
+
+		// Protected API routes will be added here
+		// Categories and Products routes will go here in next phases
 	}
 
 	// Start server
