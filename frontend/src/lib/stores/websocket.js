@@ -35,7 +35,7 @@ function createWebSocketStore() {
       ws.onclose = () => {
         console.log('WebSocket disconnected');
         update(state => ({ ...state, connected: false }));
-        
+
         // Attempt to reconnect
         if (reconnectAttempts < maxReconnectAttempts) {
           reconnectAttempts++;
@@ -52,7 +52,7 @@ function createWebSocketStore() {
         try {
           const message = JSON.parse(event.data);
           update(state => ({ ...state, lastMessage: message }));
-          
+
           // Call registered event handlers
           if (eventHandlers[message.type]) {
             eventHandlers[message.type].forEach(handler => handler(message.payload));

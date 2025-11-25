@@ -7,31 +7,31 @@
   --bg-gradient-start: #0f0c29;
   --bg-gradient-mid: #302b63;
   --bg-gradient-end: #24243e;
-  
+
   --glass-bg: rgba(255, 255, 255, 0.08);
   --glass-bg-hover: rgba(255, 255, 255, 0.12);
   --glass-border: rgba(255, 255, 255, 0.15);
   --glass-shadow: rgba(0, 0, 0, 0.3);
-  
+
   --text-primary: #ffffff;
   --text-secondary: rgba(255, 255, 255, 0.7);
   --text-muted: rgba(255, 255, 255, 0.5);
-  
+
   --accent-primary: #6366f1;
   --accent-secondary: #8b5cf6;
   --accent-gradient: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #a855f7 100%);
-  
+
   --success: #10b981;
   --warning: #f59e0b;
   --error: #ef4444;
   --info: #3b82f6;
-  
+
   /* Spacing */
   --radius-sm: 8px;
   --radius-md: 12px;
   --radius-lg: 16px;
   --radius-xl: 24px;
-  
+
   /* Font */
   --font-display: 'Space Grotesk', sans-serif;
   --font-body: 'Inter', sans-serif;

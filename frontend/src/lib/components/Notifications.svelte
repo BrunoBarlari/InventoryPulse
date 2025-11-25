@@ -11,13 +11,13 @@
 
 <div class="notifications-container">
   {#each $notifications as notification (notification.id)}
-    <div 
+    <div
       class="notification glass {notification.type}"
       role="alert"
     >
       <span class="notification-icon">{icons[notification.type]}</span>
       <span class="notification-message">{notification.message}</span>
-      <button 
+      <button
         class="notification-close"
         on:click={() => notifications.remove(notification.id)}
       >

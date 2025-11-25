@@ -1,7 +1,8 @@
 <script>
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import { categories as categoriesAPI, products as productsAPI } from '../lib/api.js';
   import { notifications } from '../lib/stores/notifications.js';
+  import { websocketStore } from '../lib/stores/websocket.js';
   import { isAdmin } from '../lib/stores/auth.js';
   import Navbar from '../lib/components/Navbar.svelte';
   import Modal from '../lib/components/Modal.svelte';
@@ -22,9 +23,56 @@
   let categoryForm = { name: '', description: '' };
   let productForm = { name: '', description: '', sku: '', quantity: 0, price: 0, category_id: 0 };
 
+  // WebSocket event handlers
+  let unsubscribers = [];
+
   onMount(async () => {
     await loadData();
+
+    // Connect to WebSocket
+    websocketStore.connect();
+
+    // Register event handlers for real-time updates
+    unsubscribers = [
+      websocketStore.on('product.created', handleProductCreated),
+      websocketStore.on('product.updated', handleProductUpdated),
+      websocketStore.on('product.deleted', handleProductDeleted),
+      websocketStore.on('stock.updated', handleStockUpdated),
+    ];
   });
+
+  onDestroy(() => {
+    // Cleanup WebSocket handlers
+    unsubscribers.forEach(unsub => unsub && unsub());
+  });
+
+  // WebSocket event handlers
+  function handleProductCreated(product) {
+    productsData = {
+      ...productsData,
+      data: [...productsData.data, product],
+      total_items: productsData.total_items + 1,
+    };
+  }
+
+  function handleProductUpdated(product) {
+    productsData = {
+      ...productsData,
+      data: productsData.data.map(p => p.id === product.id ? product : p),
+    };
+  }
+
+  function handleProductDeleted(payload) {
+    productsData = {
+      ...productsData,
+      data: productsData.data.filter(p => p.id !== payload.id),
+      total_items: productsData.total_items - 1,
+    };
+  }
+
+  function handleStockUpdated(product) {
+    handleProductUpdated(product);
+  }
 
   async function loadData() {
     isLoading = true;
@@ -45,7 +93,7 @@
   // Category CRUD
   function openCategoryModal(category = null) {
     editingCategory = category;
-    categoryForm = category 
+    categoryForm = category
       ? { name: category.name, description: category.description }
       : { name: '', description: '' };
     showCategoryModal = true;
@@ -81,7 +129,7 @@
   // Product CRUD
   function openProductModal(product = null) {
     editingProduct = product;
-    productForm = product 
+    productForm = product
       ? { ...product }
       : { name: '', description: '', sku: '', quantity: 0, price: 0, category_id: categoriesData.data[0]?.id || 0 };
     showProductModal = true;
@@ -104,7 +152,7 @@
         notifications.success('Product created');
       }
       showProductModal = false;
-      await loadData();
+      // Data will be updated via WebSocket
     } catch (err) {
       notifications.error(err.message || 'Failed to save product');
     }
@@ -115,7 +163,7 @@
     try {
       await productsAPI.delete(id);
       notifications.success('Product deleted');
-      await loadData();
+      // Data will be updated via WebSocket
     } catch (err) {
       notifications.error(err.message || 'Failed to delete product');
     }
@@ -124,8 +172,7 @@
   async function updateStock(product, delta) {
     try {
       await productsAPI.updateStock(product.id, product.quantity + delta);
-      notifications.success(`Stock updated: ${product.quantity + delta}`);
-      await loadData();
+      // Data will be updated via WebSocket
     } catch (err) {
       notifications.error('Failed to update stock');
     }
@@ -178,13 +225,13 @@
   </div>
 
   <div class="tabs">
-    <button 
+    <button
       class="tab {activeTab === 'products' ? 'active' : ''}"
       on:click={() => activeTab = 'products'}
     >
       📦 Products
     </button>
-    <button 
+    <button
       class="tab {activeTab === 'categories' ? 'active' : ''}"
       on:click={() => activeTab = 'categories'}
     >
@@ -227,8 +274,8 @@
               </tr>
             </thead>
             <tbody>
-              {#each productsData.data as product}
-                <tr>
+              {#each productsData.data as product (product.id)}
+                <tr class="animate-fadeIn">
                   <td>
                     <strong>{product.name}</strong>
                     {#if product.description}
@@ -286,7 +333,7 @@
         </div>
       {:else}
         <div class="categories-grid">
-          {#each categoriesData.data as category}
+          {#each categoriesData.data as category (category.id)}
             <div class="category-card glass glass-hover">
               <div class="category-info">
                 <h4>{category.name}</h4>
@@ -518,4 +565,3 @@
     font-size: 13px;
   }
 </style>
-

@@ -11,12 +11,12 @@ function createAuthStore() {
 
   return {
     subscribe,
-    
+
     // Initialize from localStorage
     init() {
       const isAuth = authAPI.isAuthenticated();
       const user = authAPI.getUser();
-      
+
       set({
         user,
         isAuthenticated: isAuth,

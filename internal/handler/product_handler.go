@@ -32,7 +32,7 @@ type ProductListQuery struct {
 // @Param        page query int false "Page number" default(1)
 // @Param        page_size query int false "Page size" default(10)
 // @Param        category_id query int false "Filter by category ID"
-// @Success      200  {object}  models.PaginatedResponse[models.ProductResponse]
+// @Success      200  {object}  map[string]interface{}
 // @Failure      500  {object}  models.ErrorResponse
 // @Security     BearerAuth
 // @Router       /products [get]

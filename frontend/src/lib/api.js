@@ -10,7 +10,7 @@ function getToken() {
 // Generic fetch wrapper with auth
 async function fetchAPI(endpoint, options = {}) {
   const token = getToken();
-  
+
   const config = {
     ...options,
     headers: {
@@ -24,7 +24,7 @@ async function fetchAPI(endpoint, options = {}) {
   }
 
   const response = await fetch(`${API_URL}${endpoint}`, config);
-  
+
   // Handle 401 - clear token and redirect
   if (response.status === 401) {
     localStorage.removeItem('access_token');
@@ -34,7 +34,7 @@ async function fetchAPI(endpoint, options = {}) {
   }
 
   const data = await response.json().catch(() => null);
-  
+
   if (!response.ok) {
     throw { status: response.status, ...data };
   }
@@ -49,15 +49,15 @@ export const auth = {
       method: 'POST',
       body: JSON.stringify({ email, password }),
     });
-    
+
     // Store tokens
     localStorage.setItem('access_token', data.access_token);
     localStorage.setItem('refresh_token', data.refresh_token);
-    
+
     // Get user info
     const user = await this.me();
     localStorage.setItem('user', JSON.stringify(user));
-    
+
     return { tokens: data, user };
   },
 
@@ -75,15 +75,15 @@ export const auth = {
   async refresh() {
     const refreshToken = localStorage.getItem('refresh_token');
     if (!refreshToken) throw new Error('No refresh token');
-    
+
     const data = await fetchAPI('/auth/refresh', {
       method: 'POST',
       body: JSON.stringify({ refresh_token: refreshToken }),
     });
-    
+
     localStorage.setItem('access_token', data.access_token);
     localStorage.setItem('refresh_token', data.refresh_token);
-    
+
     return data;
   },
 

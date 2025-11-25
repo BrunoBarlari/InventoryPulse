@@ -26,7 +26,7 @@ func NewCategoryHandler(categoryService service.CategoryService) *CategoryHandle
 // @Produce      json
 // @Param        page query int false "Page number" default(1)
 // @Param        page_size query int false "Page size" default(10)
-// @Success      200  {object}  models.PaginatedResponse[models.CategoryResponse]
+// @Success      200  {object}  map[string]interface{}
 // @Failure      500  {object}  models.ErrorResponse
 // @Security     BearerAuth
 // @Router       /categories [get]

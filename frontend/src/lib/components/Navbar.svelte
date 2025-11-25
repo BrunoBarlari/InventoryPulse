@@ -1,6 +1,7 @@
 <script>
   import { authStore, user, isAdmin } from '../stores/auth.js';
   import { notifications } from '../stores/notifications.js';
+  import ConnectionStatus from './ConnectionStatus.svelte';
 
   function handleLogout() {
     authStore.logout();
@@ -15,6 +16,7 @@
   </div>
 
   <div class="navbar-user">
+    <ConnectionStatus />
     {#if $user}
       <div class="user-info">
         <span class="user-email">{$user.email}</span>
@@ -78,4 +80,3 @@
     font-size: 14px;
   }
 </style>
-

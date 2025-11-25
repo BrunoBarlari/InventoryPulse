@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 
+	_ "github.com/brunobarlari/inventorypulse/docs"
 	"github.com/brunobarlari/inventorypulse/internal/config"
 	"github.com/brunobarlari/inventorypulse/internal/handler"
 	"github.com/brunobarlari/inventorypulse/internal/middleware"
@@ -12,12 +13,13 @@ import (
 	"github.com/brunobarlari/inventorypulse/pkg/jwt"
 	"github.com/brunobarlari/inventorypulse/pkg/websocket"
 	"github.com/gin-gonic/gin"
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
 // @title           InventoryPulse API
 // @version         1.0
 // @description     Backend API for inventory management with real-time updates via WebSocket
-// @termsOfService  http://swagger.io/terms/
 
 // @contact.name   API Support
 // @contact.email  support@inventorypulse.com
@@ -101,11 +103,14 @@ func main() {
 	// Health check endpoint
 	router.GET("/health", func(c *gin.Context) {
 		c.JSON(200, gin.H{
-			"status":           "ok",
-			"message":          "InventoryPulse API is running",
+			"status":            "ok",
+			"message":           "InventoryPulse API is running",
 			"websocket_clients": wsHub.GetClientCount(),
 		})
 	})
+
+	// Swagger documentation
+	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	// WebSocket endpoint
 	router.GET("/ws", wsHandler.HandleWebSocket)
@@ -116,6 +121,7 @@ func main() {
 		api.GET("/", func(c *gin.Context) {
 			c.JSON(200, gin.H{
 				"message": "Welcome to InventoryPulse API v1.0",
+				"docs":    "/swagger/index.html",
 			})
 		})
 
@@ -178,7 +184,8 @@ func main() {
 
 	// Start server
 	log.Printf("Starting server on port %s", cfg.Server.Port)
-	log.Printf("WebSocket available at ws://localhost:%s/ws", cfg.Server.Port)
+	log.Printf("Swagger docs: http://localhost:%s/swagger/index.html", cfg.Server.Port)
+	log.Printf("WebSocket: ws://localhost:%s/ws", cfg.Server.Port)
 	if err := router.Run(":" + cfg.Server.Port); err != nil {
 		log.Fatalf("Failed to start server: %v", err)
 	}
