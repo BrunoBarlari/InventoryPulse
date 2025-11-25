@@ -15,19 +15,21 @@
     align-items: center;
     gap: 6px;
     padding: 6px 12px;
-    border-radius: 20px;
-    background: rgba(239, 68, 68, 0.2);
+    border-radius: 100px;
+    background: #FEF2F2;
     font-size: 12px;
     font-weight: 500;
+    border: 1px solid #FECACA;
   }
 
   .connection-status.connected {
-    background: rgba(16, 185, 129, 0.2);
+    background: #ECFDF5;
+    border-color: #A7F3D0;
   }
 
   .status-dot {
-    width: 8px;
-    height: 8px;
+    width: 6px;
+    height: 6px;
     border-radius: 50%;
     background: var(--error);
     animation: pulse 2s infinite;
@@ -48,7 +50,6 @@
 
   @keyframes pulse {
     0%, 100% { opacity: 1; }
-    50% { opacity: 0.5; }
+    50% { opacity: 0.4; }
   }
 </style>
-
