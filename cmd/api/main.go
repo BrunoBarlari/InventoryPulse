@@ -70,18 +70,24 @@ func main() {
 
 	// Initialize repositories
 	userRepo := repository.NewUserRepository(db)
+	categoryRepo := repository.NewCategoryRepository(db)
 
 	// Initialize services
 	authService := service.NewAuthService(userRepo, jwtService)
+	categoryService := service.NewCategoryService(categoryRepo)
 
 	// Initialize handlers
 	authHandler := handler.NewAuthHandler(authService)
+	categoryHandler := handler.NewCategoryHandler(categoryService)
 
 	// Initialize middleware
 	authMiddleware := middleware.NewAuthMiddleware(authService)
 
 	// Initialize Gin router
 	router := gin.Default()
+
+	// Enable CORS
+	router.Use(middleware.CORS())
 
 	// Health check endpoint
 	router.GET("/health", func(c *gin.Context) {
@@ -106,13 +112,13 @@ func main() {
 			auth.POST("/login", authHandler.Login)
 			auth.POST("/refresh", authHandler.Refresh)
 
-			// Protected routes (require authentication)
+			// Protected auth routes
 			authProtected := auth.Group("")
 			authProtected.Use(authMiddleware.RequireAuth())
 			{
 				authProtected.GET("/me", authHandler.Me)
 
-				// Admin only routes
+				// Admin only
 				authAdmin := authProtected.Group("")
 				authAdmin.Use(authMiddleware.RequireAdmin())
 				{
@@ -121,8 +127,22 @@ func main() {
 			}
 		}
 
-		// Protected API routes will be added here
-		// Categories and Products routes will go here in next phases
+		// Category routes
+		categories := api.Group("/categories")
+		categories.Use(authMiddleware.RequireAuth())
+		{
+			categories.GET("", categoryHandler.List)
+			categories.GET("/:id", categoryHandler.Get)
+
+			// Admin only
+			categoriesAdmin := categories.Group("")
+			categoriesAdmin.Use(authMiddleware.RequireAdmin())
+			{
+				categoriesAdmin.POST("", categoryHandler.Create)
+				categoriesAdmin.PUT("/:id", categoryHandler.Update)
+				categoriesAdmin.DELETE("/:id", categoryHandler.Delete)
+			}
+		}
 	}
 
 	// Start server
