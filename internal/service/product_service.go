@@ -3,6 +3,7 @@ package service
 import (
 	"github.com/brunobarlari/inventorypulse/internal/domain/models"
 	"github.com/brunobarlari/inventorypulse/internal/repository"
+	"github.com/brunobarlari/inventorypulse/pkg/websocket"
 )
 
 type ProductService interface {
@@ -16,10 +17,14 @@ type ProductService interface {
 
 type productService struct {
 	productRepo repository.ProductRepository
+	wsHub       *websocket.Hub
 }
 
-func NewProductService(productRepo repository.ProductRepository) ProductService {
-	return &productService{productRepo: productRepo}
+func NewProductService(productRepo repository.ProductRepository, wsHub *websocket.Hub) ProductService {
+	return &productService{
+		productRepo: productRepo,
+		wsHub:       wsHub,
+	}
 }
 
 func (s *productService) Create(req *models.CreateProductRequest) (*models.Product, error) {
@@ -37,7 +42,17 @@ func (s *productService) Create(req *models.CreateProductRequest) (*models.Produ
 	}
 
 	// Reload with category
-	return s.productRepo.FindByID(product.ID)
+	product, err := s.productRepo.FindByID(product.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Broadcast WebSocket event
+	if s.wsHub != nil {
+		s.wsHub.BroadcastMessage(websocket.EventProductCreated, product.ToResponse())
+	}
+
+	return product, nil
 }
 
 func (s *productService) GetByID(id uint) (*models.Product, error) {
@@ -74,11 +89,36 @@ func (s *productService) Update(id uint, req *models.UpdateProductRequest) (*mod
 	}
 
 	// Reload with category
-	return s.productRepo.FindByID(product.ID)
+	product, err = s.productRepo.FindByID(product.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Broadcast WebSocket event
+	if s.wsHub != nil {
+		s.wsHub.BroadcastMessage(websocket.EventProductUpdated, product.ToResponse())
+	}
+
+	return product, nil
 }
 
 func (s *productService) Delete(id uint) error {
-	return s.productRepo.Delete(id)
+	// Get product before deleting for the event
+	product, err := s.productRepo.FindByID(id)
+	if err != nil {
+		return err
+	}
+
+	if err := s.productRepo.Delete(id); err != nil {
+		return err
+	}
+
+	// Broadcast WebSocket event
+	if s.wsHub != nil {
+		s.wsHub.BroadcastMessage(websocket.EventProductDeleted, map[string]uint{"id": product.ID})
+	}
+
+	return nil
 }
 
 func (s *productService) List(page, pageSize int, categoryID *uint) ([]models.Product, int64, error) {
@@ -89,6 +129,16 @@ func (s *productService) UpdateStock(id uint, quantity int) (*models.Product, er
 	if err := s.productRepo.UpdateStock(id, quantity); err != nil {
 		return nil, err
 	}
-	return s.productRepo.FindByID(id)
-}
 
+	product, err := s.productRepo.FindByID(id)
+	if err != nil {
+		return nil, err
+	}
+
+	// Broadcast WebSocket event
+	if s.wsHub != nil {
+		s.wsHub.BroadcastMessage(websocket.EventStockUpdated, product.ToResponse())
+	}
+
+	return product, nil
+}

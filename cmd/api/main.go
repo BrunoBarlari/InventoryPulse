@@ -10,6 +10,7 @@ import (
 	"github.com/brunobarlari/inventorypulse/internal/service"
 	"github.com/brunobarlari/inventorypulse/pkg/database"
 	"github.com/brunobarlari/inventorypulse/pkg/jwt"
+	"github.com/brunobarlari/inventorypulse/pkg/websocket"
 	"github.com/gin-gonic/gin"
 )
 
@@ -65,20 +66,28 @@ func main() {
 		log.Fatalf("Failed to run seeder: %v", err)
 	}
 
+	// Initialize WebSocket hub
+	wsHub := websocket.NewHub()
+	go wsHub.Run()
+	wsHandler := websocket.NewHandler(wsHub)
+
 	// Initialize JWT service
 	jwtService := jwt.NewJWTService(&cfg.JWT)
 
 	// Initialize repositories
 	userRepo := repository.NewUserRepository(db)
 	categoryRepo := repository.NewCategoryRepository(db)
+	productRepo := repository.NewProductRepository(db)
 
 	// Initialize services
 	authService := service.NewAuthService(userRepo, jwtService)
 	categoryService := service.NewCategoryService(categoryRepo)
+	productService := service.NewProductService(productRepo, wsHub)
 
 	// Initialize handlers
 	authHandler := handler.NewAuthHandler(authService)
 	categoryHandler := handler.NewCategoryHandler(categoryService)
+	productHandler := handler.NewProductHandler(productService)
 
 	// Initialize middleware
 	authMiddleware := middleware.NewAuthMiddleware(authService)
@@ -92,10 +101,14 @@ func main() {
 	// Health check endpoint
 	router.GET("/health", func(c *gin.Context) {
 		c.JSON(200, gin.H{
-			"status":  "ok",
-			"message": "InventoryPulse API is running",
+			"status":           "ok",
+			"message":          "InventoryPulse API is running",
+			"websocket_clients": wsHub.GetClientCount(),
 		})
 	})
+
+	// WebSocket endpoint
+	router.GET("/ws", wsHandler.HandleWebSocket)
 
 	// API routes
 	api := router.Group("/api")
@@ -143,10 +156,29 @@ func main() {
 				categoriesAdmin.DELETE("/:id", categoryHandler.Delete)
 			}
 		}
+
+		// Product routes
+		products := api.Group("/products")
+		products.Use(authMiddleware.RequireAuth())
+		{
+			products.GET("", productHandler.List)
+			products.GET("/:id", productHandler.Get)
+
+			// Admin only
+			productsAdmin := products.Group("")
+			productsAdmin.Use(authMiddleware.RequireAdmin())
+			{
+				productsAdmin.POST("", productHandler.Create)
+				productsAdmin.PUT("/:id", productHandler.Update)
+				productsAdmin.DELETE("/:id", productHandler.Delete)
+				productsAdmin.PATCH("/:id/stock", productHandler.UpdateStock)
+			}
+		}
 	}
 
 	// Start server
 	log.Printf("Starting server on port %s", cfg.Server.Port)
+	log.Printf("WebSocket available at ws://localhost:%s/ws", cfg.Server.Port)
 	if err := router.Run(":" + cfg.Server.Port); err != nil {
 		log.Fatalf("Failed to start server: %v", err)
 	}
