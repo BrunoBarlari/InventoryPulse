@@ -141,9 +141,10 @@ export const categories = {
 
 // Products API
 export const products = {
-  async list(page = 1, pageSize = 10, categoryId = null) {
+  async list(page = 1, pageSize = 10, categoryId = null, search = '') {
     let url = `/products?page=${page}&page_size=${pageSize}`;
     if (categoryId) url += `&category_id=${categoryId}`;
+    if (search) url += `&search=${encodeURIComponent(search)}`;
     return fetchAPI(url);
   },
 

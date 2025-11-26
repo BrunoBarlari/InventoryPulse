@@ -13,18 +13,21 @@
 
   // State
   let categoriesData = { data: [], total_items: 0 };
-  let productsData = { data: [], total_items: 0 };
+  let productsData = { data: [], total_items: 0, page: 1, page_size: 20, total_pages: 1 };
   let isLoading = true;
   let activeTab = 'products';
 
   // Track changed rows for flash effect with direction
   let changedProducts = new Map();
 
-  // Search & Filter
+  // Pagination & Search (server-side)
+  let currentPage = 1;
+  let pageSize = 20;
   let searchQuery = '';
   let selectedCategory = 'all';
+  let searchTimeout = null;
 
-  // Sorting
+  // Sorting (client-side for current page)
   let sortColumn = 'name';
   let sortDirection = 'asc';
 
@@ -129,12 +132,16 @@
     tweenedInventoryValue.set(value);
   }
 
-  async function loadData() {
+  async function loadData(resetPage = true) {
     isLoading = true;
     try {
+      if (resetPage) currentPage = 1;
+
+      const categoryId = selectedCategory !== 'all' ? parseInt(selectedCategory) : null;
+
       const [cats, prods] = await Promise.all([
         categoriesAPI.list(1, 100),
-        productsAPI.list(1, 100),
+        productsAPI.list(currentPage, pageSize, categoryId, searchQuery),
       ]);
       categoriesData = cats;
       productsData = prods;
@@ -151,6 +158,74 @@
     }
   }
 
+  // Load products with current filters (for pagination)
+  async function loadProducts(resetPage = true) {
+    isLoading = true;
+    try {
+      if (resetPage) currentPage = 1;
+
+      const categoryId = selectedCategory !== 'all' ? parseInt(selectedCategory) : null;
+      const prods = await productsAPI.list(currentPage, pageSize, categoryId, searchQuery);
+      productsData = prods;
+      tweenedTotalProducts.set(prods.total_items);
+      const stock = prods.data.reduce((sum, p) => sum + p.quantity, 0);
+      const value = prods.data.reduce((sum, p) => sum + (p.price * p.quantity), 0);
+      tweenedTotalStock.set(stock);
+      tweenedInventoryValue.set(value);
+    } catch (err) {
+      notifications.error('Failed to load products');
+    } finally {
+      isLoading = false;
+    }
+  }
+
+  // Debounced search
+  function handleSearch(value) {
+    searchQuery = value;
+    if (searchTimeout) clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(() => {
+      loadProducts(true);
+    }, 300);
+  }
+
+  // Category filter change
+  function handleCategoryChange(value) {
+    selectedCategory = value;
+    loadProducts(true);
+  }
+
+  // Pagination
+  function goToPage(page) {
+    if (page < 1 || page > productsData.total_pages) return;
+    currentPage = page;
+    loadProducts(false);
+  }
+
+  function nextPage() {
+    goToPage(currentPage + 1);
+  }
+
+  function prevPage() {
+    goToPage(currentPage - 1);
+  }
+
+  // Calculate which page numbers to show
+  function getPageNumber(index) {
+    const totalPages = productsData.total_pages;
+    if (totalPages <= 5) return index + 1;
+
+    // Show pages around current page
+    let start = Math.max(1, currentPage - 2);
+    let end = Math.min(totalPages, start + 4);
+
+    if (end - start < 4) {
+      start = Math.max(1, end - 4);
+    }
+
+    const page = start + index;
+    return page <= end ? page : 0;
+  }
+
   function handleSort(column) {
     if (sortColumn === column) {
       sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
@@ -160,28 +235,21 @@
     }
   }
 
-  $: filteredProducts = productsData.data
-    .filter(p => {
-      const matchesSearch = searchQuery === '' ||
-        p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        p.sku.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesCategory = selectedCategory === 'all' || p.category_id === parseInt(selectedCategory);
-      return matchesSearch && matchesCategory;
-    })
-    .sort((a, b) => {
-      let comparison = 0;
-      switch (sortColumn) {
-        case 'name': comparison = a.name.localeCompare(b.name); break;
-        case 'sku': comparison = a.sku.localeCompare(b.sku); break;
-        case 'stock': comparison = a.quantity - b.quantity; break;
-        case 'price': comparison = a.price - b.price; break;
-      }
-      return sortDirection === 'asc' ? comparison : -comparison;
-    });
+  // Sort products client-side (filtering is now server-side)
+  $: sortedProducts = [...productsData.data].sort((a, b) => {
+    let comparison = 0;
+    switch (sortColumn) {
+      case 'name': comparison = a.name.localeCompare(b.name); break;
+      case 'sku': comparison = a.sku.localeCompare(b.sku); break;
+      case 'stock': comparison = a.quantity - b.quantity; break;
+      case 'price': comparison = a.price - b.price; break;
+    }
+    return sortDirection === 'asc' ? comparison : -comparison;
+  });
 
   function exportToCSV() {
     const headers = ['Name', 'SKU', 'Category', 'Quantity', 'Price', 'Value'];
-    const rows = filteredProducts.map(p => [
+    const rows = sortedProducts.map(p => [
       `"${p.name}"`, p.sku, `"${getCategoryName(p.category_id)}"`,
       p.quantity, p.price.toFixed(2), (p.price * p.quantity).toFixed(2)
     ]);
@@ -528,9 +596,9 @@
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
               </svg>
-              <input type="text" placeholder="Search products..." bind:value={searchQuery} />
+              <input type="text" placeholder="Search products..." value={searchQuery} on:input={(e) => handleSearch(e.target.value)} />
             </div>
-            <select class="filter-select" bind:value={selectedCategory}>
+            <select class="filter-select" value={selectedCategory} on:change={(e) => handleCategoryChange(e.target.value)}>
               <option value="all">All Categories</option>
               {#each categoriesData.data as cat}
                 <option value={cat.id}>{cat.name}</option>
@@ -585,7 +653,7 @@
             {/each}
           </div>
         {:else if activeTab === 'products'}
-          {#if filteredProducts.length === 0}
+          {#if sortedProducts.length === 0}
             <div class="empty-state">
               <div class="empty-icon">
                 <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
@@ -628,7 +696,7 @@
                   </tr>
                 </thead>
                 <tbody>
-                  {#each filteredProducts as product (product.id)}
+                  {#each sortedProducts as product (product.id)}
                     {@const flashType = changedProducts.get(product.id)}
                     {@const stockStatus = getStockStatus(product.quantity)}
                     <tr
@@ -741,10 +809,47 @@
         {/if}
       </div>
 
-      <!-- Table Footer (FIXED) -->
-      {#if !isLoading && activeTab === 'products' && filteredProducts.length > 0}
+      <!-- Table Footer with Pagination (FIXED) -->
+      {#if !isLoading && activeTab === 'products'}
         <div class="table-footer">
-          <span>Showing {filteredProducts.length} of {productsData.total_items} products</span>
+          <span class="footer-info">
+            Showing {((currentPage - 1) * pageSize) + 1}–{Math.min(currentPage * pageSize, productsData.total_items)} of {productsData.total_items} products
+          </span>
+          {#if productsData.total_pages > 1}
+            <div class="pagination">
+              <button class="page-btn" on:click={prevPage} disabled={currentPage === 1} title="Previous">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="15 18 9 12 15 6"/>
+                </svg>
+              </button>
+
+              {#each Array(Math.min(5, productsData.total_pages)) as _, i}
+                {@const pageNum = getPageNumber(i)}
+                {#if pageNum > 0}
+                  <button
+                    class="page-btn"
+                    class:active={currentPage === pageNum}
+                    on:click={() => goToPage(pageNum)}
+                  >
+                    {pageNum}
+                  </button>
+                {/if}
+              {/each}
+
+              {#if productsData.total_pages > 5 && currentPage < productsData.total_pages - 2}
+                <span class="page-ellipsis">...</span>
+                <button class="page-btn" on:click={() => goToPage(productsData.total_pages)}>
+                  {productsData.total_pages}
+                </button>
+              {/if}
+
+              <button class="page-btn" on:click={nextPage} disabled={currentPage === productsData.total_pages} title="Next">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="9 18 15 12 9 6"/>
+                </svg>
+              </button>
+            </div>
+          {/if}
         </div>
       {/if}
     </div>
@@ -1046,14 +1151,65 @@
     height: 100%;
   }
 
-  /* TABLE FOOTER - Fixed at bottom */
+  /* TABLE FOOTER - Fixed at bottom with pagination */
   .table-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
     padding: 14px 24px;
     border-top: 1px solid #F1F5F9;
     background: #FAFBFC;
     font-size: 13px;
     color: #64748B;
     flex-shrink: 0;
+    gap: 16px;
+  }
+
+  .footer-info {
+    white-space: nowrap;
+  }
+
+  .pagination {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .page-btn {
+    min-width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: white;
+    border: 1px solid #E2E8F0;
+    border-radius: 8px;
+    color: #475569;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .page-btn:hover:not(:disabled) {
+    background: #F1F5F9;
+    border-color: #CBD5E1;
+  }
+
+  .page-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  .page-btn.active {
+    background: #10B981;
+    border-color: #10B981;
+    color: white;
+  }
+
+  .page-ellipsis {
+    padding: 0 8px;
+    color: #94A3B8;
   }
 
   /* TABS */

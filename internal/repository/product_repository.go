@@ -19,7 +19,7 @@ type ProductRepository interface {
 	FindBySKU(sku string) (*models.Product, error)
 	Update(product *models.Product) error
 	Delete(id uint) error
-	List(page, pageSize int, categoryID *uint) ([]models.Product, int64, error)
+	List(page, pageSize int, categoryID *uint, search string) ([]models.Product, int64, error)
 	UpdateStock(id uint, quantity int) error
 }
 
@@ -99,7 +99,7 @@ func (r *productRepository) Delete(id uint) error {
 	return result.Error
 }
 
-func (r *productRepository) List(page, pageSize int, categoryID *uint) ([]models.Product, int64, error) {
+func (r *productRepository) List(page, pageSize int, categoryID *uint, search string) ([]models.Product, int64, error) {
 	var products []models.Product
 	var total int64
 
@@ -107,6 +107,12 @@ func (r *productRepository) List(page, pageSize int, categoryID *uint) ([]models
 
 	if categoryID != nil && *categoryID > 0 {
 		query = query.Where("category_id = ?", *categoryID)
+	}
+
+	// Search by name or SKU (case-insensitive)
+	if search != "" {
+		searchPattern := "%" + search + "%"
+		query = query.Where("LOWER(name) LIKE LOWER(?) OR LOWER(sku) LIKE LOWER(?)", searchPattern, searchPattern)
 	}
 
 	query.Count(&total)

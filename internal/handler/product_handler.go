@@ -21,17 +21,19 @@ func NewProductHandler(productService service.ProductService) *ProductHandler {
 
 type ProductListQuery struct {
 	models.PaginationRequest
-	CategoryID uint `form:"category_id"`
+	CategoryID uint   `form:"category_id"`
+	Search     string `form:"search"`
 }
 
 // List godoc
 // @Summary      List products
-// @Description  Get paginated list of products with optional category filter
+// @Description  Get paginated list of products with optional category filter and search
 // @Tags         products
 // @Produce      json
 // @Param        page query int false "Page number" default(1)
 // @Param        page_size query int false "Page size" default(10)
 // @Param        category_id query int false "Filter by category ID"
+// @Param        search query string false "Search by name or SKU"
 // @Success      200  {object}  map[string]interface{}
 // @Failure      500  {object}  models.ErrorResponse
 // @Security     BearerAuth
@@ -54,7 +56,7 @@ func (h *ProductHandler) List(c *gin.Context) {
 		categoryID = &query.CategoryID
 	}
 
-	products, total, err := h.productService.List(page, pageSize, categoryID)
+	products, total, err := h.productService.List(page, pageSize, categoryID, query.Search)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
 			Error:   "internal_error",

@@ -11,7 +11,7 @@ type ProductService interface {
 	GetByID(id uint) (*models.Product, error)
 	Update(id uint, req *models.UpdateProductRequest) (*models.Product, error)
 	Delete(id uint) error
-	List(page, pageSize int, categoryID *uint) ([]models.Product, int64, error)
+	List(page, pageSize int, categoryID *uint, search string) ([]models.Product, int64, error)
 	UpdateStock(id uint, quantity int) (*models.Product, error)
 }
 
@@ -121,8 +121,8 @@ func (s *productService) Delete(id uint) error {
 	return nil
 }
 
-func (s *productService) List(page, pageSize int, categoryID *uint) ([]models.Product, int64, error) {
-	return s.productRepo.List(page, pageSize, categoryID)
+func (s *productService) List(page, pageSize int, categoryID *uint, search string) ([]models.Product, int64, error) {
+	return s.productRepo.List(page, pageSize, categoryID, search)
 }
 
 func (s *productService) UpdateStock(id uint, quantity int) (*models.Product, error) {
