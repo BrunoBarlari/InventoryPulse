@@ -214,8 +214,8 @@
     display: flex;
     align-items: center;
     gap: 10px;
-    background: #FEF2F2;
-    border: 1px solid #FECACA;
+    background: var(--error-bg);
+    border: 1px solid var(--error);
     color: var(--error);
     padding: 12px 14px;
     border-radius: var(--radius-md);
@@ -261,7 +261,7 @@
 
   /* Illustration side */
   .login-illustration {
-    background: linear-gradient(135deg, var(--accent-light) 0%, #F0FDF4 100%);
+    background: linear-gradient(135deg, var(--accent-light) 0%, var(--success-bg) 100%);
     display: flex;
     align-items: center;
     justify-content: center;

@@ -36,8 +36,89 @@
   let showProductModal = false;
   let showLowStockModal = false;
   let showImportModal = false;
+  let showKPIChartModal = false;
+  let selectedKPI = null;
   let editingCategory = null;
   let editingProduct = null;
+
+  // Simulated historical data for KPI charts (last 7 days)
+  const generateHistoricalData = (baseValue, variance = 0.1) => {
+    const data = [];
+    let value = baseValue * (1 - variance * 3);
+    for (let i = 6; i >= 0; i--) {
+      const change = (Math.random() - 0.3) * variance * baseValue;
+      value = Math.max(0, value + change);
+      data.push({
+        day: new Date(Date.now() - i * 24 * 60 * 60 * 1000).toLocaleDateString('en-US', { weekday: 'short' }),
+        value: Math.round(value)
+      });
+    }
+    // Ensure last value is close to current
+    data[6].value = Math.round(baseValue);
+    return data;
+  };
+
+  // KPI configurations
+  const kpiConfigs = {
+    products: {
+      title: 'Products',
+      color: '#3B82F6',
+      format: (v) => v.toLocaleString(),
+      unit: 'products'
+    },
+    categories: {
+      title: 'Categories',
+      color: '#8B5CF6',
+      format: (v) => v.toLocaleString(),
+      unit: 'categories'
+    },
+    stock: {
+      title: 'Total Stock',
+      color: '#14B8A6',
+      format: (v) => v.toLocaleString(),
+      unit: 'units'
+    },
+    value: {
+      title: 'Inventory Value',
+      color: '#10B981',
+      format: (v) => '$' + (v / 1000).toFixed(1) + 'k',
+      unit: ''
+    }
+  };
+
+  function openKPIChart(kpiType) {
+    selectedKPI = kpiType;
+    showKPIChartModal = true;
+  }
+
+  $: kpiChartData = selectedKPI ? (() => {
+    const baseValues = {
+      products: productsData.total_items || 50,
+      categories: categoriesData.total_items || 5,
+      stock: totalStock || 500,
+      value: inventoryValue || 50000
+    };
+    return generateHistoricalData(baseValues[selectedKPI], selectedKPI === 'value' ? 0.15 : 0.1);
+  })() : [];
+
+  $: chartMaxVal = kpiChartData.length > 0 ? Math.max(...kpiChartData.map(d => d.value)) : 0;
+  $: chartMinVal = kpiChartData.length > 0 ? Math.min(...kpiChartData.map(d => d.value)) : 0;
+  $: chartRange = chartMaxVal - chartMinVal || 1;
+
+  // Generate sparkline path from data
+  function generateSparkline(data, width = 80, height = 30) {
+    if (!data || data.length < 2) return '';
+    const max = Math.max(...data.map(d => d.value));
+    const min = Math.min(...data.map(d => d.value));
+    const range = max - min || 1;
+    const stepX = width / (data.length - 1);
+
+    return data.map((d, i) => {
+      const x = i * stepX;
+      const y = height - ((d.value - min) / range) * height;
+      return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
+    }).join(' ');
+  }
 
   // Form data
   let categoryForm = { name: '', description: '' };
@@ -515,7 +596,8 @@
 <main class="dashboard">
   <!-- KPIs HORIZONTAL - TOP BAR (FIXED) -->
   <header class="kpi-bar">
-    <div class="kpi-card">
+    <!-- Products KPI -->
+    <button class="kpi-card clickable" on:click={() => openKPIChart('products')}>
       <div class="kpi-icon blue">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
@@ -525,10 +607,17 @@
         <span class="kpi-value">{formatNumber($tweenedTotalProducts)}</span>
         <span class="kpi-label">Products</span>
       </div>
-      <span class="kpi-trend up">+3</span>
-    </div>
+      <div class="kpi-sparkline">
+        <svg viewBox="0 0 80 30" preserveAspectRatio="none">
+          <path d={generateSparkline(generateHistoricalData(productsData.total_items || 50, 0.1))}
+                fill="none" stroke="#3B82F6" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <span class="kpi-hint">Click for details</span>
+    </button>
 
-    <div class="kpi-card">
+    <!-- Categories KPI -->
+    <button class="kpi-card clickable" on:click={() => openKPIChart('categories')}>
       <div class="kpi-icon purple">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
@@ -538,9 +627,17 @@
         <span class="kpi-value">{formatNumber($tweenedTotalCategories)}</span>
         <span class="kpi-label">Categories</span>
       </div>
-    </div>
+      <div class="kpi-sparkline">
+        <svg viewBox="0 0 80 30" preserveAspectRatio="none">
+          <path d={generateSparkline(generateHistoricalData(categoriesData.total_items || 5, 0.05))}
+                fill="none" stroke="#8B5CF6" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <span class="kpi-hint">Click for details</span>
+    </button>
 
-    <div class="kpi-card">
+    <!-- Stock KPI -->
+    <button class="kpi-card clickable" on:click={() => openKPIChart('stock')}>
       <div class="kpi-icon" class:orange={lowStockCount > 0} class:teal={lowStockCount === 0}>
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
@@ -550,14 +647,23 @@
         <span class="kpi-value">{formatNumber($tweenedTotalStock)}</span>
         <span class="kpi-label">Total Stock</span>
       </div>
+      <div class="kpi-sparkline">
+        <svg viewBox="0 0 80 30" preserveAspectRatio="none">
+          <path d={generateSparkline(generateHistoricalData(totalStock || 500, 0.1))}
+                fill="none" stroke={lowStockCount > 0 ? '#F97316' : '#14B8A6'} stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      </div>
       {#if lowStockCount > 0}
-        <button class="kpi-alert" on:click={() => showLowStockModal = true}>
+        <button type="button" class="kpi-alert-badge" on:click|stopPropagation={() => showLowStockModal = true}>
           {lowStockCount} low
         </button>
+      {:else}
+        <span class="kpi-hint">Click for details</span>
       {/if}
-    </div>
+    </button>
 
-    <div class="kpi-card highlight">
+    <!-- Inventory Value KPI -->
+    <button class="kpi-card highlight clickable" on:click={() => openKPIChart('value')}>
       <div class="kpi-icon green">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
@@ -567,8 +673,14 @@
         <span class="kpi-value">${($tweenedInventoryValue / 1000).toFixed(1)}k</span>
         <span class="kpi-label">Inventory Value</span>
       </div>
-      <span class="kpi-trend up">+12%</span>
-    </div>
+      <div class="kpi-sparkline">
+        <svg viewBox="0 0 80 30" preserveAspectRatio="none">
+          <path d={generateSparkline(generateHistoricalData(inventoryValue || 50000, 0.15))}
+                fill="none" stroke="#10B981" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <span class="kpi-hint">Click for details</span>
+    </button>
   </header>
 
   <!-- MAIN CONTENT -->
@@ -857,6 +969,114 @@
 </main>
 
 <!-- Modals -->
+<!-- KPI Chart Modal -->
+<Modal title={selectedKPI ? kpiConfigs[selectedKPI].title + ' - Last 7 Days' : ''} show={showKPIChartModal} on:close={() => showKPIChartModal = false}>
+  {#if selectedKPI && kpiChartData.length > 0}
+    <div class="kpi-chart-modal">
+      <div class="chart-container">
+        <svg viewBox="0 0 350 200" class="chart-svg">
+          <!-- Grid lines -->
+          {#each [0, 1, 2, 3, 4] as i}
+            <line
+              x1="40" y1={30 + i * 35}
+              x2="340" y2={30 + i * 35}
+              stroke="var(--border-color)"
+              stroke-width="1"
+              stroke-dasharray="4"
+            />
+          {/each}
+
+          <!-- Y-axis labels -->
+          {#each [0, 1, 2, 3, 4] as i}
+            <text
+              x="35"
+              y={35 + i * 35}
+              text-anchor="end"
+              class="chart-label"
+            >
+              {kpiConfigs[selectedKPI].format(chartMaxVal - chartRange * (i / 4))}
+            </text>
+          {/each}
+
+          <!-- Bars -->
+          {#each kpiChartData as point, i}
+            <rect
+              x={55 + i * 42}
+              y={170 - ((point.value - chartMinVal) / chartRange) * 140}
+              width="30"
+              height={((point.value - chartMinVal) / chartRange) * 140}
+              fill={kpiConfigs[selectedKPI].color}
+              rx="4"
+              class="chart-bar"
+              style="animation-delay: {i * 0.05}s"
+            />
+            <!-- X-axis labels -->
+            <text
+              x={70 + i * 42}
+              y="190"
+              text-anchor="middle"
+              class="chart-label"
+            >
+              {point.day}
+            </text>
+          {/each}
+
+          <!-- Line overlay -->
+          <polyline
+            points={kpiChartData.map((d, i) => `${70 + i * 42},${170 - ((d.value - chartMinVal) / chartRange) * 140}`).join(' ')}
+            fill="none"
+            stroke={kpiConfigs[selectedKPI].color}
+            stroke-width="3"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            class="chart-line"
+          />
+
+          <!-- Data points -->
+          {#each kpiChartData as point, i}
+            <circle
+              cx={70 + i * 42}
+              cy={170 - ((point.value - chartMinVal) / chartRange) * 140}
+              r="5"
+              fill="var(--bg-secondary)"
+              stroke={kpiConfigs[selectedKPI].color}
+              stroke-width="3"
+              class="chart-point"
+            />
+          {/each}
+        </svg>
+      </div>
+
+      <div class="chart-summary">
+        <div class="summary-item">
+          <span class="summary-label">Current</span>
+          <span class="summary-value" style="color: {kpiConfigs[selectedKPI].color}">
+            {kpiConfigs[selectedKPI].format(kpiChartData[kpiChartData.length - 1]?.value || 0)}
+          </span>
+        </div>
+        <div class="summary-item">
+          <span class="summary-label">7-day Avg</span>
+          <span class="summary-value">
+            {kpiConfigs[selectedKPI].format(Math.round(kpiChartData.reduce((a, b) => a + b.value, 0) / kpiChartData.length))}
+          </span>
+        </div>
+        <div class="summary-item">
+          <span class="summary-label">Min</span>
+          <span class="summary-value">
+            {kpiConfigs[selectedKPI].format(Math.min(...kpiChartData.map(d => d.value)))}
+          </span>
+        </div>
+        <div class="summary-item">
+          <span class="summary-label">Max</span>
+          <span class="summary-value">
+            {kpiConfigs[selectedKPI].format(Math.max(...kpiChartData.map(d => d.value)))}
+          </span>
+        </div>
+      </div>
+    </div>
+  {/if}
+</Modal>
+
 <Modal title="Low Stock Alert" show={showLowStockModal} on:close={() => showLowStockModal = false}>
   <div class="low-stock-list">
     {#each lowStockProducts.sort((a, b) => a.quantity - b.quantity) as product (product.id)}
@@ -988,11 +1208,12 @@
   /* LAYOUT - Fixed height dashboard */
   .dashboard {
     height: calc(100vh - 64px);
-    background: #F8FAFC;
+    background: var(--bg-primary);
     padding: 24px;
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    transition: background-color 0.3s ease;
   }
 
   /* KPI BAR - HORIZONTAL TOP (FIXED) */
@@ -1009,21 +1230,21 @@
     align-items: center;
     gap: 16px;
     padding: 20px 24px;
-    background: white;
+    background: var(--bg-secondary);
     border-radius: 16px;
-    border: 1px solid #E2E8F0;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    border: 1px solid var(--border-color);
+    box-shadow: var(--shadow-sm);
     transition: all 0.2s ease;
   }
 
   .kpi-card:hover {
-    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    box-shadow: var(--shadow-md);
     transform: translateY(-2px);
   }
 
   .kpi-card.highlight {
-    background: linear-gradient(135deg, #ECFDF5 0%, #D1FAE5 100%);
-    border-color: #A7F3D0;
+    background: var(--success-bg);
+    border-color: var(--success);
   }
 
   .kpi-icon {
@@ -1036,11 +1257,11 @@
     flex-shrink: 0;
   }
 
-  .kpi-icon.blue { background: #EFF6FF; color: #3B82F6; }
-  .kpi-icon.purple { background: #F5F3FF; color: #8B5CF6; }
-  .kpi-icon.teal { background: #F0FDFA; color: #14B8A6; }
-  .kpi-icon.orange { background: #FFF7ED; color: #F97316; }
-  .kpi-icon.green { background: #ECFDF5; color: #10B981; }
+  .kpi-icon.blue { background: var(--info-bg); color: var(--info); }
+  .kpi-icon.purple { background: rgba(139, 92, 246, 0.15); color: #8B5CF6; }
+  .kpi-icon.teal { background: rgba(20, 184, 166, 0.15); color: #14B8A6; }
+  .kpi-icon.orange { background: var(--warning-bg); color: var(--warning); }
+  .kpi-icon.green { background: var(--success-bg); color: var(--success); }
 
   .kpi-info {
     flex: 1;
@@ -1051,14 +1272,14 @@
     display: block;
     font-size: 1.75rem;
     font-weight: 700;
-    color: #0F172A;
+    color: var(--text-primary);
     line-height: 1.2;
     font-variant-numeric: tabular-nums;
   }
 
   .kpi-label {
     font-size: 13px;
-    color: #64748B;
+    color: var(--text-secondary);
     font-weight: 500;
   }
 
@@ -1071,19 +1292,19 @@
   }
 
   .kpi-trend.up {
-    background: #ECFDF5;
-    color: #059669;
+    background: var(--success-bg);
+    color: var(--success);
   }
 
   .kpi-trend.down {
-    background: #FEF2F2;
-    color: #DC2626;
+    background: var(--error-bg);
+    color: var(--error);
   }
 
   .kpi-alert {
     padding: 6px 12px;
-    background: #FEF3C7;
-    color: #D97706;
+    background: var(--warning-bg);
+    color: var(--warning);
     border: none;
     border-radius: 6px;
     font-size: 12px;
@@ -1093,7 +1314,147 @@
   }
 
   .kpi-alert:hover {
-    background: #FDE68A;
+    filter: brightness(0.95);
+  }
+
+  /* Clickable KPI Cards */
+  .kpi-card.clickable {
+    cursor: pointer;
+    position: relative;
+    text-align: left;
+    width: 100%;
+  }
+
+  .kpi-card.clickable:hover {
+    border-color: var(--accent-primary);
+  }
+
+  .kpi-card.clickable:hover .kpi-hint {
+    opacity: 1;
+  }
+
+  .kpi-sparkline {
+    width: 80px;
+    height: 30px;
+    flex-shrink: 0;
+    opacity: 0.8;
+  }
+
+  .kpi-sparkline svg {
+    width: 100%;
+    height: 100%;
+  }
+
+  .kpi-hint {
+    position: absolute;
+    bottom: 6px;
+    right: 12px;
+    font-size: 10px;
+    color: var(--text-muted);
+    opacity: 0;
+    transition: opacity 0.2s ease;
+  }
+
+  .kpi-alert-badge {
+    padding: 4px 10px;
+    background: var(--warning);
+    color: white;
+    border: none;
+    border-radius: 100px;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .kpi-alert-badge:hover {
+    filter: brightness(1.1);
+  }
+
+  /* KPI Chart Modal */
+  .kpi-chart-modal {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+  }
+
+  .chart-container {
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-lg);
+    padding: 20px;
+  }
+
+  .chart-svg {
+    width: 100%;
+    height: auto;
+  }
+
+  .chart-label {
+    font-size: 11px;
+    fill: var(--text-muted);
+    font-family: var(--font-body);
+  }
+
+  .chart-bar {
+    animation: growBar 0.5s ease-out forwards;
+    transform-origin: bottom;
+  }
+
+  @keyframes growBar {
+    from {
+      transform: scaleY(0);
+    }
+    to {
+      transform: scaleY(1);
+    }
+  }
+
+  .chart-line {
+    stroke-dasharray: 1000;
+    stroke-dashoffset: 1000;
+    animation: drawLine 1s ease-out forwards;
+    animation-delay: 0.3s;
+  }
+
+  @keyframes drawLine {
+    to {
+      stroke-dashoffset: 0;
+    }
+  }
+
+  .chart-point {
+    opacity: 0;
+    animation: fadeIn 0.3s ease-out forwards;
+    animation-delay: 0.8s;
+  }
+
+  .chart-summary {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+  }
+
+  .summary-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 12px;
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-md);
+    text-align: center;
+  }
+
+  .summary-label {
+    font-size: 12px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .summary-value {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
   }
 
   /* CONTENT WRAPPER - Takes remaining space */
@@ -1107,14 +1468,15 @@
   /* TABLE CARD - Fixed height with internal scroll */
   .table-card {
     flex: 1;
-    background: white;
+    background: var(--bg-secondary);
     border-radius: 16px;
-    border: 1px solid #E2E8F0;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    border: 1px solid var(--border-color);
+    box-shadow: var(--shadow-sm);
     display: flex;
     flex-direction: column;
     overflow: hidden;
     min-height: 0;
+    transition: background-color 0.3s ease, border-color 0.3s ease;
   }
 
   .table-header {
@@ -1123,7 +1485,7 @@
     justify-content: space-between;
     gap: 16px;
     padding: 16px 24px;
-    border-bottom: 1px solid #F1F5F9;
+    border-bottom: 1px solid var(--border-color);
     flex-wrap: wrap;
     flex-shrink: 0;
   }
@@ -1157,12 +1519,13 @@
     align-items: center;
     justify-content: space-between;
     padding: 14px 24px;
-    border-top: 1px solid #F1F5F9;
-    background: #FAFBFC;
+    border-top: 1px solid var(--border-color);
+    background: var(--bg-tertiary);
     font-size: 13px;
-    color: #64748B;
+    color: var(--text-secondary);
     flex-shrink: 0;
     gap: 16px;
+    transition: background-color 0.3s ease;
   }
 
   .footer-info {
@@ -1181,10 +1544,10 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    background: white;
-    border: 1px solid #E2E8F0;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
     border-radius: 8px;
-    color: #475569;
+    color: var(--text-secondary);
     font-size: 14px;
     font-weight: 500;
     cursor: pointer;
@@ -1192,8 +1555,8 @@
   }
 
   .page-btn:hover:not(:disabled) {
-    background: #F1F5F9;
-    border-color: #CBD5E1;
+    background: var(--bg-tertiary);
+    border-color: var(--border-hover);
   }
 
   .page-btn:disabled {
@@ -1202,21 +1565,21 @@
   }
 
   .page-btn.active {
-    background: #10B981;
-    border-color: #10B981;
+    background: var(--accent-primary);
+    border-color: var(--accent-primary);
     color: white;
   }
 
   .page-ellipsis {
     padding: 0 8px;
-    color: #94A3B8;
+    color: var(--text-muted);
   }
 
   /* TABS */
   .tabs {
     display: flex;
     gap: 4px;
-    background: #F1F5F9;
+    background: var(--bg-tertiary);
     padding: 4px;
     border-radius: 10px;
   }
@@ -1228,7 +1591,7 @@
     padding: 10px 18px;
     background: transparent;
     border: none;
-    color: #64748B;
+    color: var(--text-secondary);
     font-size: 14px;
     font-weight: 500;
     cursor: pointer;
@@ -1237,17 +1600,17 @@
   }
 
   .tab:hover {
-    color: #0F172A;
+    color: var(--text-primary);
   }
 
   .tab.active {
-    background: white;
-    color: #0F172A;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    box-shadow: var(--shadow-sm);
   }
 
   .badge-alert {
-    background: #F97316;
+    background: var(--warning);
     color: white;
     font-size: 11px;
     font-weight: 600;
@@ -1261,21 +1624,21 @@
     align-items: center;
     gap: 10px;
     padding: 10px 14px;
-    background: #F8FAFC;
-    border: 1px solid #E2E8F0;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
     border-radius: 10px;
     width: 220px;
     transition: all 0.15s ease;
   }
 
   .search-box:focus-within {
-    border-color: #10B981;
-    background: white;
-    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
+    border-color: var(--accent-primary);
+    background: var(--bg-secondary);
+    box-shadow: 0 0 0 3px var(--accent-light);
   }
 
   .search-box svg {
-    color: #94A3B8;
+    color: var(--text-muted);
     flex-shrink: 0;
   }
 
@@ -1284,21 +1647,21 @@
     border: none;
     background: transparent;
     font-size: 14px;
-    color: #0F172A;
+    color: var(--text-primary);
     outline: none;
   }
 
   .search-box input::placeholder {
-    color: #94A3B8;
+    color: var(--text-muted);
   }
 
   .filter-select {
     padding: 10px 36px 10px 14px;
-    background: #F8FAFC;
-    border: 1px solid #E2E8F0;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
     border-radius: 10px;
     font-size: 14px;
-    color: #0F172A;
+    color: var(--text-primary);
     cursor: pointer;
     appearance: none;
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2394A3B8' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
@@ -1307,9 +1670,9 @@
   }
 
   .filter-select:focus {
-    border-color: #10B981;
+    border-color: var(--accent-primary);
     outline: none;
-    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
+    box-shadow: 0 0 0 3px var(--accent-light);
   }
 
   /* BUTTONS */
@@ -1319,17 +1682,17 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    background: #F8FAFC;
-    border: 1px solid #E2E8F0;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
     border-radius: 10px;
-    color: #64748B;
+    color: var(--text-secondary);
     cursor: pointer;
     transition: all 0.15s ease;
   }
 
   .btn-icon:hover {
-    background: #F1F5F9;
-    color: #0F172A;
+    background: var(--bg-primary);
+    color: var(--text-primary);
   }
 
   .btn-primary {
@@ -1337,7 +1700,7 @@
     align-items: center;
     gap: 8px;
     padding: 10px 18px;
-    background: #10B981;
+    background: var(--accent-primary);
     color: white;
     border: none;
     border-radius: 10px;
@@ -1349,7 +1712,7 @@
   }
 
   .btn-primary:hover {
-    background: #059669;
+    background: var(--accent-hover);
     transform: translateY(-1px);
     box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
   }
@@ -1365,9 +1728,9 @@
     align-items: center;
     gap: 8px;
     padding: 10px 18px;
-    background: #F1F5F9;
-    color: #475569;
-    border: 1px solid #E2E8F0;
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    border: 1px solid var(--border-color);
     border-radius: 10px;
     font-size: 14px;
     font-weight: 500;
@@ -1376,7 +1739,7 @@
   }
 
   .btn-secondary:hover {
-    background: #E2E8F0;
+    background: var(--border-color);
   }
 
   /* TABLE */
@@ -1390,11 +1753,11 @@
     text-align: left;
     font-size: 12px;
     font-weight: 600;
-    color: #64748B;
+    color: var(--text-muted);
     text-transform: uppercase;
     letter-spacing: 0.05em;
-    background: #FAFBFC;
-    border-bottom: 1px solid #F1F5F9;
+    background: var(--bg-tertiary);
+    border-bottom: 1px solid var(--border-color);
     position: sticky;
     top: 0;
     z-index: 5;
@@ -1406,11 +1769,11 @@
   }
 
   th.sortable:hover {
-    color: #0F172A;
+    color: var(--text-primary);
   }
 
   th.active {
-    color: #10B981;
+    color: var(--accent-primary);
   }
 
   .sort-arrow {
@@ -1420,7 +1783,7 @@
 
   td {
     padding: 20px 24px;
-    border-bottom: 1px solid #F1F5F9;
+    border-bottom: 1px solid var(--border-color);
     vertical-align: middle;
   }
 
@@ -1429,7 +1792,7 @@
   }
 
   tbody tr:hover {
-    background: #FAFBFC;
+    background: var(--bg-tertiary);
   }
 
   tbody tr:last-child td {
@@ -1445,21 +1808,21 @@
 
   .product-name {
     font-weight: 500;
-    color: #0F172A;
+    color: var(--text-primary);
     font-size: 15px;
   }
 
   .product-category {
     font-size: 12px;
-    color: #94A3B8;
+    color: var(--text-muted);
   }
 
   /* SKU */
   .sku {
     font-family: 'SF Mono', 'Fira Code', monospace;
     font-size: 13px;
-    color: #64748B;
-    background: #F8FAFC;
+    color: var(--text-secondary);
+    background: var(--bg-tertiary);
     padding: 4px 8px;
     border-radius: 4px;
   }
@@ -1475,22 +1838,22 @@
   .stock-value {
     font-weight: 600;
     font-size: 15px;
-    color: #0F172A;
+    color: var(--text-primary);
     font-variant-numeric: tabular-nums;
   }
 
   .stock-value.warning {
-    color: #D97706;
+    color: var(--warning);
   }
 
   .stock-value.critical {
-    color: #DC2626;
+    color: var(--error);
   }
 
   /* Stock Bar - Pills */
   .stock-bar {
     height: 8px;
-    background: #F1F5F9;
+    background: var(--bg-tertiary);
     border-radius: 100px;
     overflow: hidden;
   }
@@ -1518,7 +1881,7 @@
     font-family: 'SF Mono', 'Fira Code', monospace;
     font-size: 15px;
     font-weight: 500;
-    color: #0F172A;
+    color: var(--text-primary);
   }
 
   /* Actions */
@@ -1536,20 +1899,20 @@
     justify-content: center;
     background: transparent;
     border: none;
-    color: #64748B;
+    color: var(--text-secondary);
     cursor: pointer;
     border-radius: 8px;
     transition: all 0.15s ease;
   }
 
   .action-btn:hover {
-    background: #F1F5F9;
-    color: #0F172A;
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
   }
 
   .action-btn.danger:hover {
-    background: #FEF2F2;
-    color: #DC2626;
+    background: var(--error-bg);
+    color: var(--error);
   }
 
   /* Flash Animations */
@@ -1566,17 +1929,17 @@
   }
 
   @keyframes flashGreen {
-    0% { background: rgba(16, 185, 129, 0.15); }
+    0% { background: var(--success-bg); }
     100% { background: transparent; }
   }
 
   @keyframes flashRed {
-    0% { background: rgba(239, 68, 68, 0.15); }
+    0% { background: var(--error-bg); }
     100% { background: transparent; }
   }
 
   @keyframes flashYellow {
-    0% { background: rgba(245, 158, 11, 0.15); }
+    0% { background: var(--warning-bg); }
     100% { background: transparent; }
   }
 
@@ -1591,19 +1954,19 @@
   }
 
   .empty-icon {
-    color: #CBD5E1;
+    color: var(--text-muted);
     margin-bottom: 16px;
   }
 
   .empty-state h3 {
     font-size: 18px;
     font-weight: 600;
-    color: #0F172A;
+    color: var(--text-primary);
     margin-bottom: 8px;
   }
 
   .empty-state p {
-    color: #64748B;
+    color: var(--text-secondary);
     margin-bottom: 24px;
   }
 
@@ -1616,13 +1979,13 @@
     display: flex;
     gap: 24px;
     padding: 20px 0;
-    border-bottom: 1px solid #F1F5F9;
+    border-bottom: 1px solid var(--border-color);
     animation: shimmer 1.5s infinite;
   }
 
   .skeleton-cell {
     height: 20px;
-    background: linear-gradient(90deg, #F1F5F9 25%, #E2E8F0 50%, #F1F5F9 75%);
+    background: linear-gradient(90deg, var(--bg-tertiary) 25%, var(--border-color) 50%, var(--bg-tertiary) 75%);
     background-size: 200% 100%;
     border-radius: 4px;
     width: 15%;
@@ -1649,23 +2012,23 @@
     align-items: flex-start;
     gap: 16px;
     padding: 20px;
-    background: #FAFBFC;
-    border: 1px solid #F1F5F9;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
     border-radius: 12px;
     transition: all 0.15s ease;
   }
 
   .category-card:hover {
-    background: white;
-    border-color: #E2E8F0;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+    background: var(--bg-secondary);
+    border-color: var(--border-hover);
+    box-shadow: var(--shadow-sm);
   }
 
   .category-icon {
     width: 44px;
     height: 44px;
-    background: #EFF6FF;
-    color: #3B82F6;
+    background: var(--info-bg);
+    color: var(--info);
     border-radius: 10px;
     display: flex;
     align-items: center;
@@ -1681,13 +2044,13 @@
   .category-info h4 {
     font-size: 15px;
     font-weight: 600;
-    color: #0F172A;
+    color: var(--text-primary);
     margin-bottom: 4px;
   }
 
   .category-info p {
     font-size: 13px;
-    color: #64748B;
+    color: var(--text-secondary);
     margin-bottom: 8px;
     white-space: nowrap;
     overflow: hidden;
@@ -1696,7 +2059,7 @@
 
   .product-count {
     font-size: 12px;
-    color: #94A3B8;
+    color: var(--text-muted);
   }
 
   .category-actions {
@@ -1718,14 +2081,14 @@
     align-items: center;
     justify-content: space-between;
     padding: 14px 16px;
-    background: #F8FAFC;
+    background: var(--bg-tertiary);
     border-radius: 10px;
     gap: 16px;
   }
 
   .low-stock-item.critical {
-    background: #FEF2F2;
-    border: 1px solid #FECACA;
+    background: var(--error-bg);
+    border: 1px solid var(--error);
   }
 
   .low-stock-info {
@@ -1736,7 +2099,7 @@
 
   .low-stock-info strong {
     font-weight: 500;
-    color: #0F172A;
+    color: var(--text-primary);
   }
 
   .low-stock-qty {
@@ -1754,17 +2117,17 @@
 
   .import-help {
     font-size: 14px;
-    color: #64748B;
+    color: var(--text-secondary);
   }
 
   .import-example {
-    background: #F8FAFC;
-    border: 1px solid #E2E8F0;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
     border-radius: 8px;
     padding: 12px;
     font-size: 12px;
     font-family: 'SF Mono', monospace;
-    color: #475569;
+    color: var(--text-secondary);
     overflow-x: auto;
     white-space: pre;
   }
@@ -1773,16 +2136,16 @@
     display: flex;
     justify-content: center;
     padding: 16px;
-    border: 2px dashed #E2E8F0;
+    border: 2px dashed var(--border-color);
     border-radius: 10px;
   }
 
   .import-errors {
-    background: #FEF2F2;
-    border: 1px solid #FECACA;
+    background: var(--error-bg);
+    border: 1px solid var(--error);
     border-radius: 8px;
     padding: 12px;
-    color: #DC2626;
+    color: var(--error);
     font-size: 13px;
   }
 
@@ -1809,7 +2172,7 @@
   }
 
   .text-muted {
-    color: #94A3B8;
+    color: var(--text-muted);
     font-size: 13px;
   }
 
@@ -1826,7 +2189,7 @@
     display: block;
     font-size: 13px;
     font-weight: 500;
-    color: #475569;
+    color: var(--text-secondary);
     margin-bottom: 6px;
   }
 
@@ -1835,12 +2198,12 @@
   .form-group textarea {
     width: 100%;
     padding: 12px 14px;
-    background: #F8FAFC;
-    border: 1px solid #E2E8F0;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
     border-radius: 10px;
     font-size: 15px;
     font-family: inherit;
-    color: #0F172A;
+    color: var(--text-primary);
     transition: all 0.15s ease;
     resize: vertical;
   }
@@ -1849,14 +2212,14 @@
   .form-group select:focus,
   .form-group textarea:focus {
     outline: none;
-    border-color: #10B981;
-    background: white;
-    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
+    border-color: var(--accent-primary);
+    background: var(--bg-secondary);
+    box-shadow: 0 0 0 3px var(--accent-light);
   }
 
   .form-group input::placeholder,
   .form-group textarea::placeholder {
-    color: #94A3B8;
+    color: var(--text-muted);
   }
 
   .form-row {
@@ -1871,7 +2234,7 @@
     gap: 12px;
     margin-top: 24px;
     padding-top: 16px;
-    border-top: 1px solid #F1F5F9;
+    border-top: 1px solid var(--border-color);
   }
 
   /* RESPONSIVE */

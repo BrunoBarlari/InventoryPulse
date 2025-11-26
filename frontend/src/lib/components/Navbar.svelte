@@ -95,9 +95,8 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 12px 24px;
-    max-width: 1400px;
-    margin: 0 auto;
+    padding: 12px 32px;
+    width: 100%;
   }
 
   .navbar-brand {

@@ -95,7 +95,7 @@
   }
 
   .notification.success .notification-icon {
-    background: #ECFDF5;
+    background: var(--success-bg);
     color: var(--success);
   }
 
@@ -104,7 +104,7 @@
   }
 
   .notification.error .notification-icon {
-    background: #FEF2F2;
+    background: var(--error-bg);
     color: var(--error);
   }
 
@@ -113,7 +113,7 @@
   }
 
   .notification.warning .notification-icon {
-    background: #FFFBEB;
+    background: var(--warning-bg);
     color: var(--warning);
   }
 
@@ -122,7 +122,7 @@
   }
 
   .notification.info .notification-icon {
-    background: #F0F9FF;
+    background: var(--info-bg);
     color: var(--info);
   }
 
