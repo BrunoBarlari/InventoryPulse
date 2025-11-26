@@ -80,16 +80,18 @@ func main() {
 	userRepo := repository.NewUserRepository(db)
 	categoryRepo := repository.NewCategoryRepository(db)
 	productRepo := repository.NewProductRepository(db)
+	productHistoryRepo := repository.NewProductHistoryRepository(db)
 
 	// Initialize services
 	authService := service.NewAuthService(userRepo, jwtService)
-	categoryService := service.NewCategoryService(categoryRepo)
-	productService := service.NewProductService(productRepo, wsHub)
+	categoryService := service.NewCategoryService(categoryRepo, wsHub)
+	productService := service.NewProductService(productRepo, productHistoryRepo, wsHub)
 
 	// Initialize handlers
 	authHandler := handler.NewAuthHandler(authService)
 	categoryHandler := handler.NewCategoryHandler(categoryService)
 	productHandler := handler.NewProductHandler(productService)
+	searchHandler := handler.NewSearchHandler(productService, categoryService)
 
 	// Initialize middleware
 	authMiddleware := middleware.NewAuthMiddleware(authService)
@@ -146,6 +148,9 @@ func main() {
 			}
 		}
 
+		// Search route (unified search)
+		api.GET("/search", authMiddleware.RequireAuth(), searchHandler.Search)
+
 		// Category routes
 		categories := api.Group("/categories")
 		categories.Use(authMiddleware.RequireAuth())
@@ -169,6 +174,7 @@ func main() {
 		{
 			products.GET("", productHandler.List)
 			products.GET("/:id", productHandler.Get)
+			products.GET("/:id/history", productHandler.GetHistory)
 
 			// Admin only
 			productsAdmin := products.Group("")

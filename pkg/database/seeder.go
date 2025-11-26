@@ -12,6 +12,11 @@ import (
 func RunSeeder(db *gorm.DB, cfg *config.Config) error {
 	log.Println("Running database seeder...")
 
+	// Migrate quantity to stock for existing products
+	if err := migrateQuantityToStock(db); err != nil {
+		log.Printf("Warning: Could not migrate quantity to stock: %v", err)
+	}
+
 	// Seed admin user
 	if err := seedAdminUser(db, cfg); err != nil {
 		return err
@@ -28,6 +33,28 @@ func RunSeeder(db *gorm.DB, cfg *config.Config) error {
 	}
 
 	log.Println("Database seeding completed successfully")
+	return nil
+}
+
+// migrateQuantityToStock migrates data from quantity column to stock column
+func migrateQuantityToStock(db *gorm.DB) error {
+	// Check if quantity column exists
+	var count int64
+	db.Raw("SELECT COUNT(*) FROM information_schema.columns WHERE table_name = 'products' AND column_name = 'quantity'").Scan(&count)
+	if count == 0 {
+		return nil // Column doesn't exist, nothing to migrate
+	}
+
+	// Update stock from quantity where stock is 0 and quantity > 0
+	result := db.Exec("UPDATE products SET stock = quantity WHERE stock = 0 AND quantity > 0")
+	if result.Error != nil {
+		return result.Error
+	}
+
+	if result.RowsAffected > 0 {
+		log.Printf("Migrated %d products from quantity to stock", result.RowsAffected)
+	}
+
 	return nil
 }
 
@@ -94,16 +121,16 @@ func seedProducts(db *gorm.DB) error {
 	}
 
 	products := []models.Product{
-		{Name: "Laptop Pro 15", Description: "High-performance laptop with 15-inch display", SKU: "ELEC-001", Quantity: 50, Price: 1299.99, CategoryID: 1},
-		{Name: "Wireless Mouse", Description: "Ergonomic wireless mouse with USB receiver", SKU: "ELEC-002", Quantity: 200, Price: 29.99, CategoryID: 1},
-		{Name: "USB-C Hub", Description: "7-in-1 USB-C hub with HDMI and SD card reader", SKU: "ELEC-003", Quantity: 150, Price: 49.99, CategoryID: 1},
-		{Name: "Cotton T-Shirt", Description: "100% cotton casual t-shirt", SKU: "CLTH-001", Quantity: 300, Price: 19.99, CategoryID: 2},
-		{Name: "Denim Jeans", Description: "Classic fit denim jeans", SKU: "CLTH-002", Quantity: 150, Price: 59.99, CategoryID: 2},
-		{Name: "Programming in Go", Description: "Complete guide to Go programming language", SKU: "BOOK-001", Quantity: 75, Price: 39.99, CategoryID: 3},
-		{Name: "Clean Code", Description: "A handbook of agile software craftsmanship", SKU: "BOOK-002", Quantity: 100, Price: 34.99, CategoryID: 3},
-		{Name: "Garden Tool Set", Description: "5-piece stainless steel garden tool set", SKU: "HOME-001", Quantity: 80, Price: 44.99, CategoryID: 4},
-		{Name: "LED Desk Lamp", Description: "Adjustable LED desk lamp with USB charging", SKU: "HOME-002", Quantity: 120, Price: 35.99, CategoryID: 4},
-		{Name: "Yoga Mat", Description: "Non-slip yoga mat with carrying strap", SKU: "SPRT-001", Quantity: 200, Price: 24.99, CategoryID: 5},
+		{Name: "Laptop Pro 15", Description: "High-performance laptop with 15-inch display", SKU: "ELEC-001", Stock: 50, Price: 1299.99, CategoryID: 1},
+		{Name: "Wireless Mouse", Description: "Ergonomic wireless mouse with USB receiver", SKU: "ELEC-002", Stock: 200, Price: 29.99, CategoryID: 1},
+		{Name: "USB-C Hub", Description: "7-in-1 USB-C hub with HDMI and SD card reader", SKU: "ELEC-003", Stock: 150, Price: 49.99, CategoryID: 1},
+		{Name: "Cotton T-Shirt", Description: "100% cotton casual t-shirt", SKU: "CLTH-001", Stock: 300, Price: 19.99, CategoryID: 2},
+		{Name: "Denim Jeans", Description: "Classic fit denim jeans", SKU: "CLTH-002", Stock: 150, Price: 59.99, CategoryID: 2},
+		{Name: "Programming in Go", Description: "Complete guide to Go programming language", SKU: "BOOK-001", Stock: 75, Price: 39.99, CategoryID: 3},
+		{Name: "Clean Code", Description: "A handbook of agile software craftsmanship", SKU: "BOOK-002", Stock: 100, Price: 34.99, CategoryID: 3},
+		{Name: "Garden Tool Set", Description: "5-piece stainless steel garden tool set", SKU: "HOME-001", Stock: 80, Price: 44.99, CategoryID: 4},
+		{Name: "LED Desk Lamp", Description: "Adjustable LED desk lamp with USB charging", SKU: "HOME-002", Stock: 120, Price: 35.99, CategoryID: 4},
+		{Name: "Yoga Mat", Description: "Non-slip yoga mat with carrying strap", SKU: "SPRT-001", Stock: 200, Price: 24.99, CategoryID: 5},
 	}
 
 	for _, product := range products {

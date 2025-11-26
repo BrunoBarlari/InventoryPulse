@@ -46,6 +46,11 @@ definitions:
     - password
     - role
     type: object
+  handler.SearchResult:
+    properties:
+      categories: {}
+      products: {}
+    type: object
   handler.UserResponse:
     properties:
       email:
@@ -84,6 +89,10 @@ definitions:
     properties:
       category_id:
         type: integer
+      category_ids:
+        items:
+          type: integer
+        type: array
       description:
         maxLength: 1000
         type: string
@@ -93,15 +102,14 @@ definitions:
         type: string
       price:
         type: number
-      quantity:
-        minimum: 0
-        type: integer
       sku:
         maxLength: 50
         minLength: 1
         type: string
+      stock:
+        minimum: 0
+        type: integer
     required:
-    - category_id
     - name
     - price
     - sku
@@ -115,6 +123,10 @@ definitions:
     type: object
   models.ProductResponse:
     properties:
+      categories:
+        items:
+          $ref: '#/definitions/models.CategoryResponse'
+        type: array
       category:
         $ref: '#/definitions/models.CategoryResponse'
       category_id:
@@ -129,10 +141,10 @@ definitions:
         type: string
       price:
         type: number
-      quantity:
-        type: integer
       sku:
         type: string
+      stock:
+        type: integer
       updated_at:
         type: string
     type: object
@@ -155,6 +167,10 @@ definitions:
     properties:
       category_id:
         type: integer
+      category_ids:
+        items:
+          type: integer
+        type: array
       description:
         maxLength: 1000
         type: string
@@ -164,20 +180,19 @@ definitions:
         type: string
       price:
         type: number
-      quantity:
-        minimum: 0
-        type: integer
       sku:
         maxLength: 50
         minLength: 1
         type: string
+      stock:
+        type: integer
     type: object
   models.UpdateStockRequest:
     properties:
-      quantity:
+      stock:
         type: integer
     required:
-    - quantity
+    - stock
     type: object
 host: localhost:8080
 info:
@@ -188,7 +203,6 @@ info:
   license:
     name: MIT
     url: https://opensource.org/licenses/MIT
-  termsOfService: http://swagger.io/terms/
   title: InventoryPulse API
   version: "1.0"
 paths:
@@ -496,7 +510,8 @@ paths:
       - categories
   /products:
     get:
-      description: Get paginated list of products with optional category filter
+      description: Get paginated list of products with optional category filter and
+        search
       parameters:
       - default: 1
         description: Page number
@@ -512,6 +527,10 @@ paths:
         in: query
         name: category_id
         type: integer
+      - description: Search by name or SKU
+        in: query
+        name: search
+        type: string
       produces:
       - application/json
       responses:
@@ -681,6 +700,54 @@ paths:
       summary: Update product
       tags:
       - products
+  /products/{id}/history:
+    get:
+      description: Get the price and stock change history for a product
+      parameters:
+      - description: Product ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Start date (YYYY-MM-DD)
+        in: query
+        name: start
+        type: string
+      - description: End date (YYYY-MM-DD)
+        in: query
+        name: end
+        type: string
+      - default: 1
+        description: Page number
+        in: query
+        name: page
+        type: integer
+      - default: 10
+        description: Page size
+        in: query
+        name: page_size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get product history
+      tags:
+      - products
   /products/{id}/stock:
     patch:
       consumes:
@@ -726,6 +793,49 @@ paths:
       summary: Update product stock
       tags:
       - products
+  /search:
+    get:
+      description: Unified search endpoint for products and/or categories
+      parameters:
+      - description: Search query
+        in: query
+        name: q
+        required: true
+        type: string
+      - description: 'Type to search: ''product'', ''category'', or empty for both'
+        in: query
+        name: type
+        type: string
+      - default: 1
+        description: Page number
+        in: query
+        name: page
+        type: integer
+      - default: 10
+        description: Page size
+        in: query
+        name: page_size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handler.SearchResult'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Search products and categories
+      tags:
+      - search
 securityDefinitions:
   BearerAuth:
     description: Type "Bearer" followed by a space and JWT token.

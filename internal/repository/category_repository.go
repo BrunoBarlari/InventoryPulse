@@ -21,6 +21,7 @@ type CategoryRepository interface {
 	Delete(id uint) error
 	List(page, pageSize int) ([]models.Category, int64, error)
 	HasProducts(id uint) (bool, error)
+	Search(query string, page, pageSize int) ([]models.Category, int64, error)
 }
 
 type categoryRepository struct {
@@ -116,5 +117,26 @@ func (r *categoryRepository) HasProducts(id uint) (bool, error) {
 		return false, err
 	}
 	return count > 0, nil
+}
+
+func (r *categoryRepository) Search(query string, page, pageSize int) ([]models.Category, int64, error) {
+	var categories []models.Category
+	var total int64
+
+	searchPattern := "%" + query + "%"
+	dbQuery := r.db.Model(&models.Category{}).Where(
+		"LOWER(name) LIKE LOWER(?) OR LOWER(description) LIKE LOWER(?)",
+		searchPattern, searchPattern,
+	)
+
+	dbQuery.Count(&total)
+
+	offset := (page - 1) * pageSize
+	err := dbQuery.Offset(offset).Limit(pageSize).Order("id ASC").Find(&categories).Error
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return categories, total, nil
 }
 

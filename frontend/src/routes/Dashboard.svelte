@@ -122,7 +122,7 @@
 
   // Form data
   let categoryForm = { name: '', description: '' };
-  let productForm = { name: '', description: '', sku: '', quantity: 0, price: 0, category_id: 0 };
+  let productForm = { name: '', description: '', sku: '', stock: 0, price: 0, category_id: 0 };
 
   // Import JSON
   let importData = '';
@@ -177,9 +177,9 @@
     const oldProduct = productsData.data.find(p => p.id === product.id);
     let direction = 'neutral';
     if (oldProduct) {
-      if (product.quantity > oldProduct.quantity || product.price > oldProduct.price) {
+      if (product.stock > oldProduct.stock || product.price > oldProduct.price) {
         direction = 'up';
-      } else if (product.quantity < oldProduct.quantity || product.price < oldProduct.price) {
+      } else if (product.stock < oldProduct.stock || product.price < oldProduct.price) {
         direction = 'down';
       }
     }
@@ -207,8 +207,8 @@
   function updateTweenedValues() {
     tweenedTotalProducts.set(productsData.total_items);
     tweenedTotalCategories.set(categoriesData.total_items);
-    const stock = productsData.data.reduce((sum, p) => sum + p.quantity, 0);
-    const value = productsData.data.reduce((sum, p) => sum + (p.price * p.quantity), 0);
+    const stock = productsData.data.reduce((sum, p) => sum + (p.stock || 0), 0);
+    const value = productsData.data.reduce((sum, p) => sum + ((p.price || 0) * (p.stock || 0)), 0);
     tweenedTotalStock.set(stock);
     tweenedInventoryValue.set(value);
   }
@@ -228,8 +228,8 @@
       productsData = prods;
       tweenedTotalProducts.set(prods.total_items);
       tweenedTotalCategories.set(cats.total_items);
-      const stock = prods.data.reduce((sum, p) => sum + p.quantity, 0);
-      const value = prods.data.reduce((sum, p) => sum + (p.price * p.quantity), 0);
+      const stock = prods.data.reduce((sum, p) => sum + (p.stock || 0), 0);
+      const value = prods.data.reduce((sum, p) => sum + ((p.price || 0) * (p.stock || 0)), 0);
       tweenedTotalStock.set(stock);
       tweenedInventoryValue.set(value);
     } catch (err) {
@@ -249,8 +249,8 @@
       const prods = await productsAPI.list(currentPage, pageSize, categoryId, searchQuery);
       productsData = prods;
       tweenedTotalProducts.set(prods.total_items);
-      const stock = prods.data.reduce((sum, p) => sum + p.quantity, 0);
-      const value = prods.data.reduce((sum, p) => sum + (p.price * p.quantity), 0);
+      const stock = prods.data.reduce((sum, p) => sum + (p.stock || 0), 0);
+      const value = prods.data.reduce((sum, p) => sum + ((p.price || 0) * (p.stock || 0)), 0);
       tweenedTotalStock.set(stock);
       tweenedInventoryValue.set(value);
     } catch (err) {
@@ -320,19 +320,22 @@
   $: sortedProducts = [...productsData.data].sort((a, b) => {
     let comparison = 0;
     switch (sortColumn) {
-      case 'name': comparison = a.name.localeCompare(b.name); break;
-      case 'sku': comparison = a.sku.localeCompare(b.sku); break;
-      case 'stock': comparison = a.quantity - b.quantity; break;
-      case 'price': comparison = a.price - b.price; break;
+      case 'name': comparison = (a.name || '').localeCompare(b.name || ''); break;
+      case 'sku': comparison = (a.sku || '').localeCompare(b.sku || ''); break;
+      case 'stock': comparison = (a.stock || 0) - (b.stock || 0); break;
+      case 'price': comparison = (a.price || 0) - (b.price || 0); break;
+      case 'created_at': comparison = new Date(a.created_at || 0) - new Date(b.created_at || 0); break;
+      case 'updated_at': comparison = new Date(a.updated_at || 0) - new Date(b.updated_at || 0); break;
     }
     return sortDirection === 'asc' ? comparison : -comparison;
   });
 
   function exportToCSV() {
-    const headers = ['Name', 'SKU', 'Category', 'Quantity', 'Price', 'Value'];
+    const headers = ['Name', 'Description', 'SKU', 'Category', 'Stock', 'Price', 'Value', 'Created At', 'Updated At'];
     const rows = sortedProducts.map(p => [
-      `"${p.name}"`, p.sku, `"${getCategoryName(p.category_id)}"`,
-      p.quantity, p.price.toFixed(2), (p.price * p.quantity).toFixed(2)
+      `"${p.name}"`, `"${(p.description || '').replace(/"/g, '""')}"`, p.sku, `"${getCategoryName(p.category_id)}"`,
+      p.stock || 0, (p.price || 0).toFixed(2), ((p.price || 0) * (p.stock || 0)).toFixed(2),
+      formatDate(p.created_at), formatDate(p.updated_at)
     ]);
     const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -358,7 +361,7 @@
         name: p.name,
         description: p.description,
         sku: p.sku,
-        quantity: p.quantity,
+        stock: p.stock,
         price: p.price,
         category: getCategoryName(p.category_id)
       }))
@@ -456,7 +459,7 @@
                 name: prod.name,
                 description: prod.description || '',
                 sku: prod.sku,
-                quantity: prod.quantity || 0,
+                stock: prod.stock || 0,
                 price: prod.price || 0,
                 category_id: categoryId
               });
@@ -466,7 +469,7 @@
                 name: prod.name,
                 description: prod.description || '',
                 sku: prod.sku,
-                quantity: prod.quantity || 0,
+                stock: prod.stock || 0,
                 price: prod.price || 0,
                 category_id: categoryId
               });
@@ -529,7 +532,7 @@
 
   function openProductModal(product = null) {
     editingProduct = product;
-    productForm = product ? { ...product } : { name: '', description: '', sku: '', quantity: 0, price: 0, category_id: categoriesData.data[0]?.id || 0 };
+    productForm = product ? { ...product } : { name: '', description: '', sku: '', stock: 0, price: 0, category_id: categoriesData.data[0]?.id || 0 };
     showProductModal = true;
   }
 
@@ -538,7 +541,7 @@
       const data = {
         ...productForm,
         price: parseFloat(productForm.price),
-        quantity: parseInt(productForm.quantity),
+        stock: parseInt(productForm.stock),
         category_id: parseInt(productForm.category_id),
       };
       if (editingProduct) {
@@ -569,25 +572,37 @@
     return cat?.name || 'Unknown';
   }
 
-  function getStockPercent(quantity) {
-    return Math.min(quantity, 100);
+  function getStockPercent(stock) {
+    return Math.min(stock, 100);
   }
 
-  function getStockStatus(quantity) {
-    if (quantity <= 10) return 'critical';
-    if (quantity <= 30) return 'warning';
+  function getStockStatus(stock) {
+    if (stock <= 10) return 'critical';
+    if (stock <= 30) return 'warning';
     return 'good';
   }
 
-  $: totalStock = productsData.data.reduce((sum, p) => sum + p.quantity, 0);
-  $: inventoryValue = productsData.data.reduce((sum, p) => sum + (p.price * p.quantity), 0);
-  $: lowStockProducts = productsData.data.filter(p => p.quantity < 10);
+  $: totalStock = productsData.data.reduce((sum, p) => sum + (p.stock || 0), 0);
+  $: inventoryValue = productsData.data.reduce((sum, p) => sum + ((p.price || 0) * (p.stock || 0)), 0);
+  $: lowStockProducts = productsData.data.filter(p => (p.stock || 0) < 10);
   $: lowStockCount = lowStockProducts.length;
-  $: criticalStockCount = productsData.data.filter(p => p.quantity <= 3).length;
+  $: criticalStockCount = productsData.data.filter(p => (p.stock || 0) <= 3).length;
   $: avgPrice = productsData.data.length > 0 ? productsData.data.reduce((sum, p) => sum + p.price, 0) / productsData.data.length : 0;
 
   function formatNumber(n) {
     return Math.round(n).toLocaleString();
+  }
+
+  function formatDate(dateStr) {
+    if (!dateStr) return '-';
+    const date = new Date(dateStr);
+    return date.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
   }
 </script>
 
@@ -792,6 +807,7 @@
                       Product
                       {#if sortColumn === 'name'}<span class="sort-arrow">{sortDirection === 'asc' ? '↑' : '↓'}</span>{/if}
                     </th>
+                    <th>Description</th>
                     <th class="sortable" class:active={sortColumn === 'sku'} on:click={() => handleSort('sku')}>
                       SKU
                       {#if sortColumn === 'sku'}<span class="sort-arrow">{sortDirection === 'asc' ? '↑' : '↓'}</span>{/if}
@@ -804,13 +820,21 @@
                       Price
                       {#if sortColumn === 'price'}<span class="sort-arrow">{sortDirection === 'asc' ? '↑' : '↓'}</span>{/if}
                     </th>
+                    <th class="sortable" class:active={sortColumn === 'created_at'} on:click={() => handleSort('created_at')}>
+                      Created
+                      {#if sortColumn === 'created_at'}<span class="sort-arrow">{sortDirection === 'asc' ? '↑' : '↓'}</span>{/if}
+                    </th>
+                    <th class="sortable" class:active={sortColumn === 'updated_at'} on:click={() => handleSort('updated_at')}>
+                      Updated
+                      {#if sortColumn === 'updated_at'}<span class="sort-arrow">{sortDirection === 'asc' ? '↑' : '↓'}</span>{/if}
+                    </th>
                     {#if $isAdmin}<th class="text-right">Actions</th>{/if}
                   </tr>
                 </thead>
                 <tbody>
                   {#each sortedProducts as product (product.id)}
                     {@const flashType = changedProducts.get(product.id)}
-                    {@const stockStatus = getStockStatus(product.quantity)}
+                    {@const stockStatus = getStockStatus(product.stock)}
                     <tr
                       class:flash-up={flashType === 'up'}
                       class:flash-down={flashType === 'down'}
@@ -825,19 +849,28 @@
                           <span class="product-category">{getCategoryName(product.category_id)}</span>
                         </div>
                       </td>
+                      <td class="description-cell">
+                        <span class="description-text">{product.description || '-'}</span>
+                      </td>
                       <td><code class="sku">{product.sku}</code></td>
                       <td>
                         <div class="stock-cell">
                           <span class="stock-value" class:critical={stockStatus === 'critical'} class:warning={stockStatus === 'warning'}>
-                            {product.quantity}
+                            {product.stock || 0}
                           </span>
                           <div class="stock-bar">
-                            <div class="stock-fill {stockStatus}" style="width: {getStockPercent(product.quantity)}%"></div>
+                            <div class="stock-fill {stockStatus}" style="width: {getStockPercent(product.stock || 0)}%"></div>
                           </div>
                         </div>
                       </td>
                       <td class="text-right">
-                        <span class="price">${product.price.toFixed(2)}</span>
+                        <span class="price">${(product.price || 0).toFixed(2)}</span>
+                      </td>
+                      <td class="date-cell">
+                        <span class="date-text">{formatDate(product.created_at)}</span>
+                      </td>
+                      <td class="date-cell">
+                        <span class="date-text">{formatDate(product.updated_at)}</span>
                       </td>
                       {#if $isAdmin}
                         <td class="text-right">
@@ -1079,14 +1112,14 @@
 
 <Modal title="Low Stock Alert" show={showLowStockModal} on:close={() => showLowStockModal = false}>
   <div class="low-stock-list">
-    {#each lowStockProducts.sort((a, b) => a.quantity - b.quantity) as product (product.id)}
-      <div class="low-stock-item" class:critical={product.quantity <= 3}>
+    {#each lowStockProducts.sort((a, b) => a.stock - b.stock) as product (product.id)}
+      <div class="low-stock-item" class:critical={product.stock <= 3}>
         <div class="low-stock-info">
           <strong>{product.name}</strong>
           <code class="sku">{product.sku}</code>
         </div>
         <div class="low-stock-qty">
-          <span class="stock-value" class:critical={product.quantity <= 3}>{product.quantity}</span>
+          <span class="stock-value" class:critical={product.stock <= 3}>{product.stock}</span>
           <span class="text-muted">units</span>
         </div>
       </div>
@@ -1104,7 +1137,7 @@
     { "name": "Electronics", "description": "..." }
   ],
   "products": [
-    { "name": "Phone", "sku": "PHN-001", "quantity": 10, "price": 599.99, "category": "Electronics" }
+    { "name": "Phone", "sku": "PHN-001", "stock": 10, "price": 599.99, "category": "Electronics" }
   ]
 }`}</pre>
 
@@ -1189,8 +1222,8 @@
     </div>
     <div class="form-row">
       <div class="form-group">
-        <label for="prod-qty">Quantity</label>
-        <input type="number" id="prod-qty" bind:value={productForm.quantity} min="0" required />
+        <label for="prod-qty">Stock</label>
+        <input type="number" id="prod-qty" bind:value={productForm.stock} min="0" required />
       </div>
       <div class="form-group">
         <label for="prod-price">Price ($)</label>
@@ -1825,6 +1858,31 @@
     background: var(--bg-tertiary);
     padding: 4px 8px;
     border-radius: 4px;
+  }
+
+  /* Description Cell */
+  .description-cell {
+    max-width: 200px;
+  }
+
+  .description-text {
+    font-size: 13px;
+    color: var(--text-secondary);
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* Date Cell */
+  .date-cell {
+    white-space: nowrap;
+  }
+
+  .date-text {
+    font-size: 13px;
+    color: var(--text-secondary);
   }
 
   /* Stock Cell */

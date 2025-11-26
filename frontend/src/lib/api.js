@@ -166,11 +166,18 @@ export const products = {
     });
   },
 
-  async updateStock(id, quantity) {
+  async updateStock(id, stock) {
     return fetchAPI(`/products/${id}/stock`, {
       method: 'PATCH',
-      body: JSON.stringify({ quantity }),
+      body: JSON.stringify({ stock }),
     });
+  },
+
+  async getHistory(id, start = '', end = '', page = 1, pageSize = 10) {
+    let url = `/products/${id}/history?page=${page}&page_size=${pageSize}`;
+    if (start) url += `&start=${encodeURIComponent(start)}`;
+    if (end) url += `&end=${encodeURIComponent(end)}`;
+    return fetchAPI(url);
   },
 
   async delete(id) {
@@ -180,5 +187,14 @@ export const products = {
   },
 };
 
-export default { auth, categories, products };
+// Search API
+export const search = {
+  async unified(query, type = '', page = 1, pageSize = 10) {
+    let url = `/search?q=${encodeURIComponent(query)}&page=${page}&page_size=${pageSize}`;
+    if (type) url += `&type=${type}`;
+    return fetchAPI(url);
+  },
+};
+
+export default { auth, categories, products, search };
 

@@ -89,7 +89,16 @@ function createWebSocketStore() {
         notifications.warning('Product deleted');
         break;
       case 'stock.updated':
-        notifications.info(`Stock updated: ${message.payload.name} → ${message.payload.quantity}`);
+        notifications.info(`Stock updated: ${message.payload.name} → ${message.payload.stock}`);
+        break;
+      case 'category.created':
+        notifications.success(`New category: ${message.payload.name}`);
+        break;
+      case 'category.updated':
+        notifications.info(`Category updated: ${message.payload.name}`);
+        break;
+      case 'category.deleted':
+        notifications.warning('Category deleted');
         break;
     }
   }
