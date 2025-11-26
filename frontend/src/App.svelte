@@ -1,11 +1,13 @@
 <script>
   import { onMount } from 'svelte';
   import { authStore, isAuthenticated, isLoading } from './lib/stores/auth.js';
+  import { theme } from './lib/stores/theme.js';
   import Notifications from './lib/components/Notifications.svelte';
   import Login from './routes/Login.svelte';
   import Dashboard from './routes/Dashboard.svelte';
 
   onMount(() => {
+    theme.init();
     authStore.init();
   });
 </script>
