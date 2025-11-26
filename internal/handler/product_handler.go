@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/brunobarlari/inventorypulse/internal/domain/models"
 	"github.com/brunobarlari/inventorypulse/internal/repository"
@@ -21,17 +22,19 @@ func NewProductHandler(productService service.ProductService) *ProductHandler {
 
 type ProductListQuery struct {
 	models.PaginationRequest
-	CategoryID uint `form:"category_id"`
+	CategoryID uint   `form:"category_id"`
+	Search     string `form:"search"`
 }
 
 // List godoc
 // @Summary      List products
-// @Description  Get paginated list of products with optional category filter
+// @Description  Get paginated list of products with optional category filter and search
 // @Tags         products
 // @Produce      json
 // @Param        page query int false "Page number" default(1)
 // @Param        page_size query int false "Page size" default(10)
 // @Param        category_id query int false "Filter by category ID"
+// @Param        search query string false "Search by name or SKU"
 // @Success      200  {object}  map[string]interface{}
 // @Failure      500  {object}  models.ErrorResponse
 // @Security     BearerAuth
@@ -54,7 +57,7 @@ func (h *ProductHandler) List(c *gin.Context) {
 		categoryID = &query.CategoryID
 	}
 
-	products, total, err := h.productService.List(page, pageSize, categoryID)
+	products, total, err := h.productService.List(page, pageSize, categoryID, query.Search)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
 			Error:   "internal_error",
@@ -307,7 +310,7 @@ func (h *ProductHandler) UpdateStock(c *gin.Context) {
 		return
 	}
 
-	product, err := h.productService.UpdateStock(uint(id), req.Quantity)
+	product, err := h.productService.UpdateStock(uint(id), req.Stock)
 	if err != nil {
 		if errors.Is(err, repository.ErrProductNotFound) {
 			c.JSON(http.StatusNotFound, models.ErrorResponse{
@@ -326,3 +329,96 @@ func (h *ProductHandler) UpdateStock(c *gin.Context) {
 	c.JSON(http.StatusOK, product.ToResponse())
 }
 
+// GetHistory godoc
+// @Summary      Get product history
+// @Description  Get the price and stock change history for a product
+// @Tags         products
+// @Produce      json
+// @Param        id path int true "Product ID"
+// @Param        start query string false "Start date (YYYY-MM-DD)"
+// @Param        end query string false "End date (YYYY-MM-DD)"
+// @Param        page query int false "Page number" default(1)
+// @Param        page_size query int false "Page size" default(10)
+// @Success      200  {object}  map[string]interface{}
+// @Failure      400  {object}  models.ErrorResponse
+// @Failure      404  {object}  models.ErrorResponse
+// @Security     BearerAuth
+// @Router       /products/{id}/history [get]
+func (h *ProductHandler) GetHistory(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Error:   "validation_error",
+			Message: "Invalid product ID",
+		})
+		return
+	}
+
+	var query models.ProductHistoryQuery
+	if err := c.ShouldBindQuery(&query); err != nil {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Error:   "validation_error",
+			Message: err.Error(),
+		})
+		return
+	}
+
+	page := query.GetPage()
+	pageSize := query.GetPageSize()
+
+	// Parse date filters
+	var startDate, endDate *time.Time
+	if query.Start != "" {
+		t, err := time.Parse("2006-01-02", query.Start)
+		if err != nil {
+			// Try RFC3339 format
+			t, err = time.Parse(time.RFC3339, query.Start)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, models.ErrorResponse{
+					Error:   "validation_error",
+					Message: "Invalid start date format. Use YYYY-MM-DD or RFC3339",
+				})
+				return
+			}
+		}
+		startDate = &t
+	}
+	if query.End != "" {
+		t, err := time.Parse("2006-01-02", query.End)
+		if err != nil {
+			// Try RFC3339 format
+			t, err = time.Parse(time.RFC3339, query.End)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, models.ErrorResponse{
+					Error:   "validation_error",
+					Message: "Invalid end date format. Use YYYY-MM-DD or RFC3339",
+				})
+				return
+			}
+		}
+		endDate = &t
+	}
+
+	history, total, err := h.productService.GetHistory(uint(id), startDate, endDate, page, pageSize)
+	if err != nil {
+		if errors.Is(err, repository.ErrProductNotFound) {
+			c.JSON(http.StatusNotFound, models.ErrorResponse{
+				Error:   "not_found",
+				Message: "Product not found",
+			})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+			Error:   "internal_error",
+			Message: "Failed to retrieve product history",
+		})
+		return
+	}
+
+	responses := make([]models.ProductHistoryResponse, len(history))
+	for i, h := range history {
+		responses[i] = h.ToResponse()
+	}
+
+	c.JSON(http.StatusOK, models.NewPaginatedResponse(responses, page, pageSize, total))
+}

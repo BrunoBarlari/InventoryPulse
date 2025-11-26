@@ -9,7 +9,6 @@ const docTemplate = `{
     "info": {
         "description": "{{escape .Description}}",
         "title": "{{.Title}}",
-        "termsOfService": "http://swagger.io/terms/",
         "contact": {
             "name": "API Support",
             "email": "support@inventorypulse.com"
@@ -501,7 +500,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Get paginated list of products with optional category filter",
+                "description": "Get paginated list of products with optional category filter and search",
                 "produces": [
                     "application/json"
                 ],
@@ -528,6 +527,12 @@ const docTemplate = `{
                         "type": "integer",
                         "description": "Filter by category ID",
                         "name": "category_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Search by name or SKU",
+                        "name": "search",
                         "in": "query"
                     }
                 ],
@@ -785,6 +790,79 @@ const docTemplate = `{
                 }
             }
         },
+        "/products/{id}/history": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Get the price and stock change history for a product",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "products"
+                ],
+                "summary": "Get product history",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Product ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Start date (YYYY-MM-DD)",
+                        "name": "start",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "End date (YYYY-MM-DD)",
+                        "name": "end",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 1,
+                        "description": "Page number",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 10,
+                        "description": "Page size",
+                        "name": "page_size",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/products/{id}/stock": {
             "patch": {
                 "security": [
@@ -848,6 +926,72 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/search": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Unified search endpoint for products and/or categories",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "search"
+                ],
+                "summary": "Search products and categories",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Search query",
+                        "name": "q",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Type to search: 'product', 'category', or empty for both",
+                        "name": "type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 1,
+                        "description": "Page number",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 10,
+                        "description": "Page size",
+                        "name": "page_size",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handler.SearchResult"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
                         "schema": {
                             "$ref": "#/definitions/models.ErrorResponse"
                         }
@@ -925,6 +1069,13 @@ const docTemplate = `{
                 }
             }
         },
+        "handler.SearchResult": {
+            "type": "object",
+            "properties": {
+                "categories": {},
+                "products": {}
+            }
+        },
         "handler.UserResponse": {
             "type": "object",
             "properties": {
@@ -979,7 +1130,6 @@ const docTemplate = `{
         "models.CreateProductRequest": {
             "type": "object",
             "required": [
-                "category_id",
                 "name",
                 "price",
                 "sku"
@@ -987,6 +1137,12 @@ const docTemplate = `{
             "properties": {
                 "category_id": {
                     "type": "integer"
+                },
+                "category_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
                 },
                 "description": {
                     "type": "string",
@@ -1000,14 +1156,14 @@ const docTemplate = `{
                 "price": {
                     "type": "number"
                 },
-                "quantity": {
-                    "type": "integer",
-                    "minimum": 0
-                },
                 "sku": {
                     "type": "string",
                     "maxLength": 50,
                     "minLength": 1
+                },
+                "stock": {
+                    "type": "integer",
+                    "minimum": 0
                 }
             }
         },
@@ -1025,6 +1181,12 @@ const docTemplate = `{
         "models.ProductResponse": {
             "type": "object",
             "properties": {
+                "categories": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.CategoryResponse"
+                    }
+                },
                 "category": {
                     "$ref": "#/definitions/models.CategoryResponse"
                 },
@@ -1046,11 +1208,11 @@ const docTemplate = `{
                 "price": {
                     "type": "number"
                 },
-                "quantity": {
-                    "type": "integer"
-                },
                 "sku": {
                     "type": "string"
+                },
+                "stock": {
+                    "type": "integer"
                 },
                 "updated_at": {
                     "type": "string"
@@ -1085,6 +1247,12 @@ const docTemplate = `{
                 "category_id": {
                     "type": "integer"
                 },
+                "category_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
                 "description": {
                     "type": "string",
                     "maxLength": 1000
@@ -1097,24 +1265,23 @@ const docTemplate = `{
                 "price": {
                     "type": "number"
                 },
-                "quantity": {
-                    "type": "integer",
-                    "minimum": 0
-                },
                 "sku": {
                     "type": "string",
                     "maxLength": 50,
                     "minLength": 1
+                },
+                "stock": {
+                    "type": "integer"
                 }
             }
         },
         "models.UpdateStockRequest": {
             "type": "object",
             "required": [
-                "quantity"
+                "stock"
             ],
             "properties": {
-                "quantity": {
+                "stock": {
                     "type": "integer"
                 }
             }
