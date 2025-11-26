@@ -1,6 +1,6 @@
 # 📦 InventoryPulse
 
-A modern, real-time inventory management system built with Go (Gin) backend and Svelte frontend. Features JWT authentication, WebSocket updates, and a beautiful glassmorphism UI.
+A modern, real-time inventory management system built with Go (Gin) backend and Svelte frontend. Features JWT authentication, WebSocket updates, product history tracking, and a beautiful glassmorphism UI.
 
 ![Go](https://img.shields.io/badge/Go-1.22+-00ADD8?style=flat-square&logo=go)
 ![Svelte](https://img.shields.io/badge/Svelte-4.0+-FF3E00?style=flat-square&logo=svelte)
@@ -10,13 +10,68 @@ A modern, real-time inventory management system built with Go (Gin) backend and 
 ## ✨ Features
 
 - **🔐 JWT Authentication** - Secure login with access and refresh tokens
-- **👥 Role-Based Access Control** - Admin and Viewer roles
-- **📦 Product Management** - Full CRUD operations with categories
-- **📁 Category Management** - Organize products into categories
+- **👥 Role-Based Access Control** - Admin and Client roles
+- **📦 Product Management** - Full CRUD operations with multiple categories support
+- **📁 Category Management** - Organize products into categories (many-to-many)
+- **📜 Product History** - Track price and stock changes over time
+- **🔍 Unified Search** - Search products and categories in one endpoint
 - **⚡ Real-Time Updates** - WebSocket-powered live data synchronization
 - **🎨 Modern UI** - Glassmorphism design with Svelte
 - **📊 Dashboard** - Overview stats and inventory value
 - **🔄 Auto-Migration** - Database schema managed automatically
+
+## 🗄️ Database Schema
+
+```
+┌─────────────────┐       ┌──────────────────────┐       ┌─────────────────┐
+│     users       │       │  product_categories  │       │   categories    │
+├─────────────────┤       ├──────────────────────┤       ├─────────────────┤
+│ id (PK)         │       │ product_id (PK, FK)  │───────│ id (PK)         │
+│ email (unique)  │       │ category_id (PK, FK) │       │ name (unique)   │
+│ password_hash   │       └──────────────────────┘       │ description     │
+│ role            │                 │                    │ created_at      │
+│ created_at      │                 │                    │ updated_at      │
+│ updated_at      │                 │                    │ deleted_at      │
+│ deleted_at      │       ┌─────────┴─────────┐          └─────────────────┘
+└─────────────────┘       │                   │
+                          ▼                   │
+                ┌─────────────────┐           │
+                │    products     │           │
+                ├─────────────────┤           │
+                │ id (PK)         │───────────┘
+                │ name            │
+                │ description     │
+                │ sku (unique)    │
+                │ stock           │
+                │ price           │
+                │ category_id(FK) │
+                │ created_at      │
+                │ updated_at      │
+                │ deleted_at      │
+                └────────┬────────┘
+                         │
+                         │
+                         ▼
+                ┌─────────────────┐
+                │ product_history │
+                ├─────────────────┤
+                │ id (PK)         │
+                │ product_id (FK) │
+                │ price           │
+                │ stock           │
+                │ changed_at      │
+                └─────────────────┘
+```
+
+### Models
+
+| Table | Fields |
+|-------|--------|
+| **products** | id, name, description, sku, price, stock, category_id, created_at, updated_at |
+| **categories** | id, name, description, created_at, updated_at |
+| **product_categories** | product_id, category_id |
+| **product_history** | id, product_id, price, stock, changed_at |
+| **users** | id, email, password_hash, role, created_at, updated_at |
 
 ## 🛠️ Tech Stack
 
@@ -39,7 +94,7 @@ A modern, real-time inventory management system built with Go (Gin) backend and 
 
 - Go 1.22+
 - Node.js 18+
-- Docker (for PostgreSQL)
+- Docker & Docker Compose
 
 ### 1. Clone and Setup
 
@@ -48,23 +103,49 @@ git clone https://github.com/yourusername/inventorypulse.git
 cd inventorypulse
 ```
 
-### 2. Start PostgreSQL
+### 2. Configure Environment
+
+Create a `.env` file with the following configuration:
+
+```env
+# Server Configuration
+SERVER_PORT=8080
+GIN_MODE=debug
+
+# Database Configuration
+DB_HOST=localhost
+DB_PORT=5432
+DB_USER=inventoryuser
+DB_PASSWORD=inventorypass
+DB_NAME=inventorypulse
+DB_SSLMODE=disable
+
+# JWT Configuration
+JWT_SECRET=your-super-secret-jwt-key-change-in-production
+JWT_EXPIRY_HOURS=24
+JWT_REFRESH_EXPIRY_HOURS=168
+
+# Admin User (created on first run)
+ADMIN_EMAIL=admin@inventorypulse.com
+ADMIN_PASSWORD=admin123
+```
+
+### 3. Start Database with Docker Compose
+
+```bash
+docker-compose up -d
+```
+
+Or manually:
 
 ```bash
 docker run -d \
   --name inventorypulse_db \
-  -e POSTGRES_USER=postgres \
-  -e POSTGRES_PASSWORD=postgres \
+  -e POSTGRES_USER=inventoryuser \
+  -e POSTGRES_PASSWORD=inventorypass \
   -e POSTGRES_DB=inventorypulse \
   -p 5432:5432 \
   postgres:16-alpine
-```
-
-### 3. Configure Environment
-
-```bash
-cp .env.example .env
-# Edit .env if needed
 ```
 
 ### 4. Run Backend
@@ -92,7 +173,11 @@ Default admin credentials:
 - **Email**: `admin@inventorypulse.com`
 - **Password**: `admin123`
 
-## 📚 API Endpoints
+## 📚 API Documentation
+
+### Swagger UI
+
+Access the interactive API documentation at: `http://localhost:8080/swagger/index.html`
 
 ### Authentication
 
@@ -107,8 +192,8 @@ Default admin credentials:
 
 | Method | Endpoint | Description | Auth |
 |--------|----------|-------------|------|
-| GET | `/api/categories` | List categories | Required |
-| GET | `/api/categories/:id` | Get category | Required |
+| GET | `/api/categories` | List categories (paginated) | Required |
+| GET | `/api/categories/:id` | Get category by ID | Required |
 | POST | `/api/categories` | Create category | Admin |
 | PUT | `/api/categories/:id` | Update category | Admin |
 | DELETE | `/api/categories/:id` | Delete category | Admin |
@@ -117,24 +202,137 @@ Default admin credentials:
 
 | Method | Endpoint | Description | Auth |
 |--------|----------|-------------|------|
-| GET | `/api/products` | List products | Required |
-| GET | `/api/products/:id` | Get product | Required |
+| GET | `/api/products` | List products (paginated, filterable) | Required |
+| GET | `/api/products/:id` | Get product by ID | Required |
 | POST | `/api/products` | Create product | Admin |
 | PUT | `/api/products/:id` | Update product | Admin |
 | DELETE | `/api/products/:id` | Delete product | Admin |
 | PATCH | `/api/products/:id/stock` | Update stock | Admin |
+| GET | `/api/products/:id/history` | Get product price/stock history | Required |
 
-### WebSocket
+#### Product History Query Parameters
 
-| Endpoint | Description |
-|----------|-------------|
-| `ws://localhost:8080/ws` | Real-time updates |
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `start` | string | Start date filter (YYYY-MM-DD) |
+| `end` | string | End date filter (YYYY-MM-DD) |
+| `page` | int | Page number (default: 1) |
+| `page_size` | int | Items per page (default: 10) |
 
-**WebSocket Events:**
-- `product.created` - New product added
-- `product.updated` - Product modified
-- `product.deleted` - Product removed
-- `stock.updated` - Stock quantity changed
+### Search
+
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| GET | `/api/search` | Unified search for products and categories | Required |
+
+#### Search Query Parameters
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `q` | string | Search query (required) |
+| `type` | string | Filter by type: `product`, `category`, or empty for both |
+| `page` | int | Page number (default: 1) |
+| `page_size` | int | Items per page (default: 10) |
+
+**Example:**
+```bash
+# Search all
+GET /api/search?q=laptop
+
+# Search only products
+GET /api/search?q=laptop&type=product
+
+# Search only categories
+GET /api/search?q=electronics&type=category
+```
+
+## 🔌 WebSocket Documentation
+
+### Connection
+
+Connect to the WebSocket endpoint:
+
+```
+ws://localhost:8080/ws
+```
+
+### Events
+
+The WebSocket server broadcasts the following events in real-time:
+
+#### Product Events
+
+| Event | Description | Payload |
+|-------|-------------|---------|
+| `product.created` | New product added | Product object |
+| `product.updated` | Product modified | Product object |
+| `product.deleted` | Product removed | `{ "id": <product_id> }` |
+| `stock.updated` | Stock quantity changed | Product object |
+
+#### Category Events
+
+| Event | Description | Payload |
+|-------|-------------|---------|
+| `category.created` | New category added | Category object |
+| `category.updated` | Category modified | Category object |
+| `category.deleted` | Category removed | `{ "id": <category_id> }` |
+
+### Message Format
+
+```json
+{
+  "type": "product.created",
+  "payload": {
+    "id": 1,
+    "name": "Product Name",
+    "description": "Description",
+    "sku": "SKU-001",
+    "stock": 100,
+    "price": 29.99,
+    "category_id": 1,
+    "created_at": "2024-01-01T00:00:00Z",
+    "updated_at": "2024-01-01T00:00:00Z"
+  }
+}
+```
+
+### JavaScript Example
+
+```javascript
+const ws = new WebSocket('ws://localhost:8080/ws');
+
+ws.onopen = () => {
+  console.log('Connected to WebSocket');
+};
+
+ws.onmessage = (event) => {
+  const message = JSON.parse(event.data);
+  console.log('Event:', message.type);
+  console.log('Payload:', message.payload);
+
+  switch (message.type) {
+    case 'product.created':
+      // Handle new product
+      break;
+    case 'product.updated':
+    case 'stock.updated':
+      // Handle product update
+      break;
+    case 'product.deleted':
+      // Handle product deletion
+      break;
+    case 'category.created':
+    case 'category.updated':
+    case 'category.deleted':
+      // Handle category changes
+      break;
+  }
+};
+
+ws.onclose = () => {
+  console.log('Disconnected from WebSocket');
+};
+```
 
 ## 🏗️ Project Structure
 
@@ -152,6 +350,7 @@ inventorypulse/
 │   ├── database/         # DB connection, migrations, seeder
 │   ├── jwt/              # JWT utilities
 │   └── websocket/        # WebSocket hub and handlers
+├── docs/                 # Swagger documentation
 ├── frontend/             # Svelte frontend application
 │   ├── src/
 │   │   ├── lib/          # Components, stores, API client
@@ -161,6 +360,94 @@ inventorypulse/
 ├── Makefile
 └── README.md
 ```
+
+## 🎨 Design Decisions
+
+### Architecture
+
+1. **Clean Architecture**: The project follows clean architecture principles with clear separation between layers:
+   - **Handlers**: HTTP request handling and validation
+   - **Services**: Business logic
+   - **Repositories**: Database operations
+
+2. **Dependency Injection**: All dependencies are injected through constructors, making the code testable and maintainable.
+
+### Database
+
+1. **GORM with AutoMigrate**: Automatic schema management for rapid development.
+
+2. **Soft Deletes**: Products and categories use soft deletes (`deleted_at`) to preserve data integrity and allow recovery.
+
+3. **Product History**: A separate table tracks all price and stock changes for auditing and analytics.
+
+4. **Many-to-Many Categories**: Products can belong to multiple categories through the `product_categories` junction table.
+
+### Authentication
+
+1. **JWT with Refresh Tokens**: Implements secure authentication with short-lived access tokens and long-lived refresh tokens.
+
+2. **Role-Based Access Control**: Two roles implemented:
+   - **Admin**: Full CRUD access to all resources
+   - **Client**: Read-only access to products and categories
+
+### Real-Time Updates
+
+1. **WebSocket Hub Pattern**: A central hub manages all WebSocket connections and broadcasts events efficiently.
+
+2. **Event-Driven Updates**: All CRUD operations emit WebSocket events, keeping connected clients in sync.
+
+## 🚢 Deployment
+
+### Using Docker Compose (Recommended)
+
+1. Build the backend:
+```bash
+go build -o bin/inventorypulse ./cmd/api
+```
+
+2. Start all services:
+```bash
+docker-compose up -d
+```
+
+### Manual Deployment
+
+1. **Database**: Set up a PostgreSQL 16+ instance
+
+2. **Backend**:
+```bash
+# Build
+go build -o inventorypulse ./cmd/api
+
+# Set environment variables
+export DB_HOST=your-db-host
+export DB_PORT=5432
+export DB_USER=your-user
+export DB_PASSWORD=your-password
+export DB_NAME=inventorypulse
+export JWT_SECRET=your-production-secret
+export GIN_MODE=release
+
+# Run
+./inventorypulse
+```
+
+3. **Frontend**:
+```bash
+cd frontend
+npm run build
+# Serve the dist/ folder with nginx or any static server
+```
+
+### Production Checklist
+
+- [ ] Set `GIN_MODE=release`
+- [ ] Use a strong `JWT_SECRET`
+- [ ] Enable HTTPS/TLS
+- [ ] Configure proper database credentials
+- [ ] Set up database backups
+- [ ] Configure CORS for your domain
+- [ ] Use a reverse proxy (nginx, Caddy)
 
 ## 🔧 Development
 
@@ -186,9 +473,12 @@ make swagger      # Generate Swagger docs
 | `DB_USER` | postgres | Database user |
 | `DB_PASSWORD` | postgres | Database password |
 | `DB_NAME` | inventorypulse | Database name |
+| `DB_SSLMODE` | disable | Database SSL mode |
 | `JWT_SECRET` | (required) | JWT signing secret |
 | `JWT_EXPIRY_HOURS` | 24 | Access token expiry |
 | `JWT_REFRESH_EXPIRY_HOURS` | 168 | Refresh token expiry |
+| `ADMIN_EMAIL` | admin@inventorypulse.com | Initial admin email |
+| `ADMIN_PASSWORD` | admin123 | Initial admin password |
 
 ## 📝 License
 
